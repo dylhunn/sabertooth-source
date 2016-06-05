@@ -1,14 +1,19 @@
 //#define NDEBUG // Disable assertions
 
 #include <assert.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #define NO_COORD {255, 255}
 #define NO_PIECE {'0', false, false}
+
+// starting size is prime number
+#define TT_STARTING_SIZE 15485867
 
 typedef enum castle {
 	N, K, Q // castle directions
@@ -40,13 +45,21 @@ typedef struct board {
 	bool black_to_move;
 } board;
 
+typedef struct evaluation {
+	move best;
+	float score;
+} evaluation;
+
 const piece no_piece = NO_PIECE;
 const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE};
 const char promo_p[] = {'Q', 'N', 'B', 'R'}; // promotion targets
-const int ttable_size = 10^5;
+const double tt_max_load = .7; // re-hash at 70% load factor
 
-uint64_t tt_keys[ttable_size] = {0};
-move tt_values[ttable_size];
+uint64_t *tt_keys = NULL;
+evaluation *tt_values = NULL;
+uint64_t tt_size = TT_STARTING_SIZE;
+uint64_t tt_count = 0;
+uint64_t tt_rehash_count; // computed based on max_load
 uint64_t zobrist[64][12]; // zobrist table for pieces
 uint64_t zobrist_castle_wq; // removed when castling rights are lost
 uint64_t zobrist_castle_wk;
@@ -60,8 +73,12 @@ void apply(board *b, move m);
 void unapply(board *b, move m);
 void update_castling_rights_hash(board *b, move m);
 void tt_init();
+void tt_auto_cleanup();
 uint64_t tt_hash_position(board *b);
-move *board_moves(board *b, bool white, int *count);
+void tt_put(board *b, evaluation e);
+evaluation *tt_get(board *b);
+void tt_expand();
+move *board_moves(board *b, int *count);
 int piece_moves(board *b, coord c, move *list);
 int diagonal_moves(board *b, coord c, move *list, int steps);
 int horizontal_moves(board *b, coord c, move *list, int steps);
@@ -113,19 +130,26 @@ static inline uint64_t tt_pieceval(board *b, coord c) {
 	return zobrist[square_code(c)][piece_code];
 }
 
+static inline uint64_t tt_index(board *b) {
+	uint64_t idx = b->hash % tt_size;
+	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) idx = (idx + 1) % tt_size;
+	return idx;
+}
+
 int main(int argc, char *argv[]) {
-	//tt_init();
+	tt_init();
 	board b; 
 	b.black_to_move = false;
 	reset_board(&b);
 	int moves = 0;
-	move *list = board_moves(&b, true, &moves);
+	move *list = board_moves(&b, &moves);
 	printf("Moves available: %d\n", moves);
 	set(&b, (coord){0, 1}, no_piece);
-	move *list2 = board_moves(&b, true, &moves);
+	move *list2 = board_moves(&b, &moves);
 	printf("Moves available: %d\n", moves);
 	free(list);
 	free(list2);
+	
 }
 
 void reset_board(board *b) {
@@ -221,7 +245,16 @@ void update_castling_rights_hash(board *b, move m) {
 	else if (isRook && !isWhite) b->hash ^= zobrist_castle_bk;
 }
 
+// Invoke to prepare transposition table
 void tt_init() {
+	if (tt_keys != NULL) free(tt_keys);
+	if (tt_values != NULL) free(tt_values);
+	tt_keys = malloc(sizeof(uint64_t) * tt_size);
+	memset(tt_keys, 0, tt_size);
+	tt_values = malloc(sizeof(evaluation) * tt_size);
+	tt_count = 0;
+	tt_rehash_count = ceil(tt_max_load * tt_size);
+
 	srand(time(NULL));
 	for (int i = 0; i < 64; i++) {
 		for (int j = 0; j < 12; j++) {
@@ -233,6 +266,13 @@ void tt_init() {
 	zobrist_castle_bq = rand64();
 	zobrist_castle_bk = rand64();
 	zobrist_black_to_move = rand64();
+	atexit(tt_auto_cleanup);
+}
+
+// Automatically called
+void tt_auto_cleanup() {
+	free(tt_keys);
+	free(tt_values);
 }
 
 uint64_t tt_hash_position(board *b) {
@@ -265,10 +305,45 @@ uint64_t tt_hash_position(board *b) {
 	return hash;
 }
 
+void tt_put(board *b, evaluation e) {
+	if (tt_count >= tt_rehash_count) tt_expand();
+	uint64_t idx = tt_index(b);
+	if (tt_keys[idx] == 0) tt_count++;
+	tt_keys[idx] = b->hash;
+	tt_values[idx] = e;
+}
+
+// Returns NULL if entry is not found.
+evaluation *tt_get(board *b) {
+	uint64_t idx = tt_index(b);
+	if (tt_keys[idx] == 0) return NULL;
+	return tt_values + idx;
+}
+
+void tt_expand() {
+	uint64_t new_size = tt_size * 2;
+	uint64_t *new_keys = malloc(sizeof(uint64_t) * new_size);
+	evaluation *new_values = malloc(sizeof(uint64_t) * new_size);
+	memset(new_keys, 0, new_size); // zero out keys
+	for (uint64_t i = 0; i < tt_size; i++) { // for every old index
+		if (tt_keys[i] == 0) continue; // skip empty slots
+		uint64_t new_idx = tt_keys[i] % new_size;
+		new_keys[new_idx] = tt_keys[i];
+		new_values[new_idx] = tt_values[i];
+	}
+	free(tt_keys);
+	free(tt_values);
+	tt_keys = new_keys;
+	tt_values = new_values;
+	tt_size = new_size;
+	tt_rehash_count = ceil(tt_max_load * new_size);
+}
+
 // Generates pseudo-legal moves for a player.
 // (Does not exclude moves that put the king in check.)
 // Generates an array of valid moves, and populates the count.
-move *board_moves(board *b, bool white, int *count) {
+move *board_moves(board *b, int *count) {
+	bool white = !b->black_to_move;
 	move *moves = malloc(sizeof(move) * 120); // Up to 120 moves supported
 	*count = 0;
 	for (uint8_t i = 0; i < 8; i++) { // col
@@ -278,7 +353,7 @@ move *board_moves(board *b, bool white, int *count) {
 		}
 
 	}
-	realloc(moves, sizeof(move) * (*count));
+	moves = realloc(moves, sizeof(move) * (*count));
 	return moves;
 }
 
