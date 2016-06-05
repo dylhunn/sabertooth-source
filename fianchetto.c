@@ -10,11 +10,35 @@
 #define NO_COORD {255, 255}
 #define NO_PIECE {'0', false, false}
 
-typedef enum castle {N, K, Q} castle; // castle directions
-typedef struct piece {char type; bool white; bool moved;} piece;
-typedef struct coord {uint8_t col; uint8_t row;} coord;
-typedef struct move {coord from; coord to; piece captured; piece promote_to; castle c; bool flipped_moved;} move;
-typedef struct board {piece b[8][8]; uint64_t hash;} boardd; // cols then rows
+typedef enum castle {
+	N, K, Q // castle directions
+} castle;
+
+typedef struct piece {
+	char type;
+	bool white;
+	bool moved;
+} piece;
+
+typedef struct coord {
+	uint8_t col;
+	uint8_t row;
+} coord;
+
+typedef struct move {
+	coord from;
+	coord to;
+	piece captured;
+	piece promote_to;
+	castle c;
+	bool flipped_moved;
+} move;
+
+typedef struct board {
+	piece b[8][8]; // cols then rows
+	uint64_t hash;
+	bool black_to_move;
+} board;
 
 const piece no_piece = NO_PIECE;
 const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE};
@@ -23,49 +47,88 @@ const int ttable_size = 10^5;
 
 uint64_t tt_keys[ttable_size] = {0};
 move tt_values[ttable_size];
-uint64_t zobrist[64][12];
+uint64_t zobrist[64][12]; // zobrist table for pieces
+uint64_t zobrist_castle_wq; // removed when castling rights are lost
+uint64_t zobrist_castle_wk;
+uint64_t zobrist_castle_bq;
+uint64_t zobrist_castle_bk;
+uint64_t zobrist_black_to_move;
 
 int main(int argc, char *argv[]);
-void reset_board(boardd *b);
-void apply(boardd *b, move m);
-void unapply(boardd *b, move m);
+void reset_board(board *b);
+void apply(board *b, move m);
+void unapply(board *b, move m);
+void update_castling_rights_hash(board *b, move m);
 void tt_init();
-inline uint64_t tt_pieceval(boardd *b, coord c);
-move *board_moves(boardd *b, bool white, int *count);
-int piece_moves(boardd *b, coord c, move *list);
-int diagonal_moves(boardd *b, coord c, move *list, int steps);
-int horizontal_moves(boardd *b, coord c, move *list, int steps);
-int pawn_moves(boardd *b, coord c, move *list);
-int castle_moves(boardd *b, coord c, move *list);
-int moves_slide(boardd *b, coord orig_c, move *list, int dx, int dy, uint8_t steps);
-bool add_move(boardd *b, move m, move *list);
+uint64_t tt_hash_position(board *b);
+move *board_moves(board *b, bool white, int *count);
+int piece_moves(board *b, coord c, move *list);
+int diagonal_moves(board *b, coord c, move *list, int steps);
+int horizontal_moves(board *b, coord c, move *list, int steps);
+int pawn_moves(board *b, coord c, move *list);
+int castle_moves(board *b, coord c, move *list);
+int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, uint8_t steps);
+bool add_move(board *b, move m, move *list);
 bool in_check(int col, int row);
 uint64_t rand64();
 
-static inline bool p_eq(piece a, piece b) {return a.type == b.type && a.white == b.white && a.moved == b.moved;}
-static inline bool c_eq(coord a, coord b) {return a.col == b.col && a.row == b.row;}
-static inline bool m_eq(move a, move b) {return c_eq(a.from, b.from) && c_eq(a.to, b.to) 
-				&& p_eq(a.captured, b.captured) && p_eq(a.promote_to, b.promote_to);}
-static inline bool in_bounds(coord c) {return c.row <= 7 && c.col <= 7;} // coordinates are unsigned
-static inline piece at(boardd *b, coord c) {return b->b[c.col][c.row];}
-static inline void set(boardd *b, coord c, piece p) {b->b[c.col][c.row] = p;}
+static inline bool p_eq(piece a, piece b) {
+	return a.type == b.type && a.white == b.white && a.moved == b.moved;
+}
+
+static inline bool c_eq(coord a, coord b) {
+	return a.col == b.col && a.row == b.row;
+}
+
+static inline bool m_eq(move a, move b) {
+	return c_eq(a.from, b.from) && c_eq(a.to, b.to) && p_eq(a.captured, b.captured) && p_eq(a.promote_to, b.promote_to);
+}
+
+static inline bool in_bounds(coord c) {
+	return c.row <= 7 && c.col <= 7; // coordinates are unsigned
+}
+
+static inline piece at(board *b, coord c) {
+	return b->b[c.col][c.row];
+}
+
+static inline void set(board *b, coord c, piece p) {
+	b->b[c.col][c.row] = p;
+}
+
+static inline int square_code(coord c) {
+	return (c.col-1)*8+c.row;
+}
+
+static inline uint64_t tt_pieceval(board *b, coord c) {
+	int piece_code = 0;
+	piece p = at(b, c);
+	if (p_eq(p, no_piece)) return 0;
+	if (p.white) piece_code += 6;
+	if (p.type == 'N') piece_code += 1;
+	else if (p.type == 'B') piece_code += 2;
+	else if (p.type == 'R') piece_code += 3;
+	else if (p.type == 'Q') piece_code += 4;
+	else piece_code += 5;
+	return zobrist[square_code(c)][piece_code];
+}
 
 int main(int argc, char *argv[]) {
 	//tt_init();
-	boardd b; 
+	board b; 
+	b.black_to_move = false;
 	reset_board(&b);
-	int moves;
+	int moves = 0;
 	move *list = board_moves(&b, true, &moves);
 	printf("Moves available: %d\n", moves);
 	set(&b, (coord){0, 1}, no_piece);
 	move *list2 = board_moves(&b, true, &moves);
 	printf("Moves available: %d\n", moves);
-	//free(list);
-	//free(list2);
+	free(list);
+	free(list2);
 }
 
-void reset_board(boardd *b) {
-	b->hash = 0;
+void reset_board(board *b) {
 	for (int i = 16; i < 48; i++) b->b[i%8][i/8] = no_piece; // empty squares
 	for (int i = 0; i < 8; i++) b->b[i][1] = (piece){'P', true, false}; // white pawns
 	b->b[0][0] = b->b[7][0] = (piece){'R', true, false}; // white rooks
@@ -79,34 +142,83 @@ void reset_board(boardd *b) {
 	b->b[2][7] = b->b[5][7] = (piece){'B', false, false}; // black bishops
 	b->b[3][7] = (piece){'Q', false, false}; // black queen
 	b->b[4][7] = (piece){'K', false, false}; // black king
+	b->hash = tt_hash_position(b);
 }
 
-void apply(boardd *b, move m) {
-	set(b, m.to, p_eq(m.promote_to, no_piece) ? at(b, m.from) : m.promote_to);
+void apply(board *b, move m) {
+	b->hash ^= tt_pieceval(b, m.from);
+	b->hash ^= tt_pieceval(b, m.to);
+	piece new_piece = p_eq(m.promote_to, no_piece) ? at(b, m.from) : m.promote_to;
+	set(b, m.to, new_piece);
 	set(b, m.from, no_piece);
 	if (!at(b, m.to).moved) m.flipped_moved = true;
 	else m.flipped_moved = false;
 	b->b[m.to.col][m.to.row].moved = true;
 	if (m.c == K) { // castle
+		b->hash ^= tt_pieceval(b, (coord){7, m.to.row});
 		b->b[5][m.to.row] = (piece){'R', at(b, m.to).white, true};
 		b->b[7][m.to.row] = no_piece;
+		b->hash ^= tt_pieceval(b, (coord){5, m.to.row});
 	} else if (m.c == Q) {
+		b->hash ^= tt_pieceval(b, (coord){0, m.to.row});
 		b->b[3][m.to.row] = (piece){'R', at(b, m.to).white, true};
 		b->b[0][m.to.row] = no_piece;
+		b->hash ^= tt_pieceval(b, (coord){3, m.to.row});
 	}
+	update_castling_rights_hash(b, m);
+	b->hash ^= zobrist_black_to_move;
+	b->black_to_move = !b->black_to_move;
+	b->hash ^= tt_pieceval(b, m.to);
 }
 
-void unapply(boardd *b, move m) {
-	set(b, m.from, p_eq(m.promote_to, no_piece) ? at(b, m.to) : (piece){'P', at(b, m.to).white, true});
+void unapply(board *b, move m) {
+	b->hash ^= tt_pieceval(b, m.to);
+	update_castling_rights_hash(b, m);
+	b->hash ^= zobrist_black_to_move;
+	b->black_to_move = !b->black_to_move;
+	piece old_piece = p_eq(m.promote_to, no_piece) ? at(b, m.to) : (piece){'P', at(b, m.to).white, true};
+	set(b, m.from, old_piece);
 	set(b, m.to, m.captured);
 	if (m.flipped_moved) b->b[m.from.col][m.from.row].moved = false;
 	if (m.c == K) { // castle
+		b->hash ^= tt_pieceval(b, (coord){5, m.from.row});
 		b->b[7][m.from.row] = (piece){'R', at(b, m.from).white, false};
 		b->b[5][m.from.row] = no_piece;
+		b->hash ^= tt_pieceval(b, (coord){7, m.from.row});
 	} else if (m.c == Q) {
+		b->hash ^= tt_pieceval(b, (coord){3, m.from.row});
 		b->b[0][m.from.row] = (piece){'R', at(b, m.from).white, false};
 		b->b[3][m.from.row] = no_piece;
+		b->hash ^= tt_pieceval(b, (coord){0, m.from.row});
 	}
+	b->hash ^= tt_pieceval(b, m.from);
+	b->hash ^= tt_pieceval(b, m.to);
+}
+
+// If m was the first move of a rook or king, revokes castling rights in the hash.
+// Call this AFTER applying m to b, or BEFORE m is unapplied.
+// Relies on the flipped_moved field.
+void update_castling_rights_hash(board *b, move m) {
+	if (!m.flipped_moved) return;
+	bool isKing = at(b, m.to).type == 'K';
+	bool isRook = at(b, m.to).type == 'R';
+	if (!isKing && !isRook) return;
+	bool isWhite = at(b, m.to).white;
+	// castling strips rights
+	if (m.c == Q && isWhite) b->hash ^= zobrist_castle_wq;
+	if (m.c == K && isWhite) b->hash ^= zobrist_castle_wk;
+	if (m.c == Q && !isWhite) b->hash ^= zobrist_castle_bq;
+	if (m.c == K && !isWhite) b->hash ^= zobrist_castle_bk;
+	if (isKing && isWhite) {
+		b->hash ^= zobrist_castle_wq;
+		b->hash ^= zobrist_castle_wk;
+	} else if (isKing) {
+		b->hash ^= zobrist_castle_bq;
+		b->hash ^= zobrist_castle_bk;
+	} else if (isRook && isWhite && m.from.col == 0) b->hash ^= zobrist_castle_wq;
+	else if (isRook && !isWhite && m.from.col == 0) b->hash ^= zobrist_castle_bq;
+	else if (isRook && isWhite) b->hash ^= zobrist_castle_wk; 
+	else if (isRook && !isWhite) b->hash ^= zobrist_castle_bk;
 }
 
 void tt_init() {
@@ -116,26 +228,47 @@ void tt_init() {
 			zobrist[i][j] = rand64();
 		}
 	}
+	zobrist_castle_wq = rand64();
+	zobrist_castle_wk = rand64();
+	zobrist_castle_bq = rand64();
+	zobrist_castle_bk = rand64();
+	zobrist_black_to_move = rand64();
 }
 
-inline uint64_t tt_pieceval(boardd *b, coord c) {
-	const int square_code = (c.col-1)*8+c.row;
-	int piece_code = 0;
-	piece p = at(b, c);
-	assert(!p_eq(p, no_piece));
-	if (p.white) piece_code += 6;
-	if (p.type == 'N') piece_code += 1;
-	else if (p.type == 'B') piece_code += 2;
-	else if (p.type == 'R') piece_code += 3;
-	else if (p.type == 'Q') piece_code += 4;
-	else piece_code += 5;
-	return zobrist[square_code][piece_code];
+uint64_t tt_hash_position(board *b) {
+	uint64_t hash = 0;
+	for (int i = 0; i < 8; i++) {
+		for (int j = 0; j < 8; j++) {
+			hash ^= tt_pieceval(b, (coord){i, j});
+		}
+	}
+	if (b->black_to_move) hash ^= zobrist_black_to_move;
+
+	// white castling
+	if (b->b[4][0].type == 'K' && !b->b[4][0].moved) {
+		if (b->b[0][0].type == 'R' && !b->b[0][0].moved) {
+			hash ^= zobrist_castle_wq;
+		}
+		if (b->b[7][0].type == 'R' && !b->b[7][0].moved) {
+			hash ^= zobrist_castle_wk;
+		}
+	}
+	// black castling
+	if (b->b[4][7].type == 'K' && !b->b[4][7].moved) {
+		if (b->b[0][7].type == 'R' && !b->b[0][7].moved) {
+			hash ^= zobrist_castle_bq;
+		}
+		if (b->b[7][7].type == 'R' && !b->b[7][7].moved) {
+			hash ^= zobrist_castle_bk;
+		}
+	}
+	return hash;
 }
 
 // Generates pseudo-legal moves for a player.
 // (Does not exclude moves that put the king in check.)
 // Generates an array of valid moves, and populates the count.
-move *board_moves(boardd *b, bool white, int *count) {
+move *board_moves(board *b, bool white, int *count) {
 	move *moves = malloc(sizeof(move) * 120); // Up to 120 moves supported
 	*count = 0;
 	for (uint8_t i = 0; i < 8; i++) { // col
@@ -151,7 +284,7 @@ move *board_moves(boardd *b, bool white, int *count) {
 
 // Writes all legal moves for a piece to an array starting at index 0; 
 // returns the number of items added.
-int piece_moves(boardd *b, coord c, move *list) {
+int piece_moves(board *b, coord c, move *list) {
 	int added = 0;
 	if (p_eq(at(b, c), no_piece)) return 0;
 	if (at(b, c).type == 'P') {
@@ -161,8 +294,8 @@ int piece_moves(boardd *b, coord c, move *list) {
 	} else if (at(b, c).type == 'N') {
 		for (int i = -2; i <= 2; i += 4) {
 			for (int j = -1; j <= 1; j += 2) {
-				added += moves_slide(b, c, list + added, i, j, 1);
-				added += moves_slide(b, c, list + added, j, i, 1);
+				added += slide_moves(b, c, list + added, i, j, 1);
+				added += slide_moves(b, c, list + added, j, i, 1);
 			}
 		}
 	} else if (at(b, c).type == 'R') {
@@ -179,26 +312,26 @@ int piece_moves(boardd *b, coord c, move *list) {
 	return added;
 }
 
-int diagonal_moves(boardd *b, coord c, move *list, int steps) {
+int diagonal_moves(board *b, coord c, move *list, int steps) {
 	int added = 0;
-	added += moves_slide(b, c, list, 1, 1, steps);
-	added += moves_slide(b, c, list + added, 1, -1, steps);
-	added += moves_slide(b, c, list + added, -1, 1, steps);
-	added += moves_slide(b, c, list + added, -1, -1, steps);
+	added += slide_moves(b, c, list, 1, 1, steps);
+	added += slide_moves(b, c, list + added, 1, -1, steps);
+	added += slide_moves(b, c, list + added, -1, 1, steps);
+	added += slide_moves(b, c, list + added, -1, -1, steps);
 	return added;
 }
 
-int horizontal_moves(boardd *b, coord c, move *list, int steps) {
+int horizontal_moves(board *b, coord c, move *list, int steps) {
 	int added = 0;
-	added += moves_slide(b, c, list, 1, 0, steps);
-	added += moves_slide(b, c, list + added, -1, 0, steps);
-	added += moves_slide(b, c, list + added, 0, 1, steps);
-	added += moves_slide(b, c, list + added, 0, -1, steps);
+	added += slide_moves(b, c, list, 1, 0, steps);
+	added += slide_moves(b, c, list + added, -1, 0, steps);
+	added += slide_moves(b, c, list + added, 0, 1, steps);
+	added += slide_moves(b, c, list + added, 0, -1, steps);
 	return added;
 }
 
 // Precondition: the piece at c is a pawn.
-int pawn_moves(boardd *b, coord c, move *list) {
+int pawn_moves(board *b, coord c, move *list) {
 	assert(at(b, c).type == 'P');
 	int added = 0;
 	piece cp = at(b, c);
@@ -230,7 +363,7 @@ int pawn_moves(boardd *b, coord c, move *list) {
 }
 
 // Precondition: the piece at c is a king.
-int castle_moves(boardd *b, coord c, move *list) {
+int castle_moves(board *b, coord c, move *list) {
 	assert(at(b, c).type == 'K');
 	int added = 0;
 	int row = at(b, c).white ? 0 : 7;
@@ -248,7 +381,7 @@ int castle_moves(boardd *b, coord c, move *list) {
 
 // Writes all legal moves to an array by sliding from a given origin with some dx and dy for n steps.
 // Stops on capture, board bounds, or blocking.
-int moves_slide(boardd *b, coord orig_c, move *list, int dx, int dy, uint8_t steps) {
+int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, uint8_t steps) {
 	int added = 0;
 	coord curr_c = {orig_c.col, orig_c.row};
 	for (uint8_t s = 1; s <= steps; s++) {
@@ -263,7 +396,7 @@ int moves_slide(boardd *b, coord orig_c, move *list, int dx, int dy, uint8_t ste
 }
 
 // Adds a move at the front of the list if it doesn't put the king in check
-bool add_move(boardd *b, move m, move *list) {
+bool add_move(board *b, move m, move *list) {
 	list[0] = m; return true; // todo
 	/*apply(b, m);
 	bool viable = in_check(king_loc);
