@@ -1,5 +1,3 @@
-//#define NDEBUG // Disable assertions
-
 /* Optimization TODO list:
  * - Store sets of pieces by color for use in:
  *   - board_moves
@@ -58,48 +56,50 @@ typedef struct evaluation {
 	int score;
 } evaluation;
 
-const piece no_piece = NO_PIECE;
-const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE};
-const char promo_p[] = {'Q', 'N', 'B', 'R'}; // promotion targets
-const double tt_max_load = .7; // re-hash at 70% load factor
+static const piece no_piece = NO_PIECE;
+static const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE, N, false};
+static const char promo_p[] = {'Q', 'N', 'B', 'R'}; // promotion targets
+static const double tt_max_load = .7; // re-hash at 70% load factor
 
-uint64_t *tt_keys = NULL;
-evaluation *tt_values = NULL;
-uint64_t tt_size = TT_STARTING_SIZE;
-uint64_t tt_count = 0;
-uint64_t tt_rehash_count; // computed based on max_load
-uint64_t zobrist[64][12]; // zobrist table for pieces
-uint64_t zobrist_castle_wq; // removed when castling rights are lost
-uint64_t zobrist_castle_wk;
-uint64_t zobrist_castle_bq;
-uint64_t zobrist_castle_bk;
-uint64_t zobrist_black_to_move;
+static uint64_t *tt_keys = NULL;
+static evaluation *tt_values = NULL;
+static uint64_t tt_size = TT_STARTING_SIZE;
+static uint64_t tt_count = 0;
+static uint64_t tt_rehash_count; // computed based on max_load
+static uint64_t zobrist[64][12]; // zobrist table for pieces
+static uint64_t zobrist_castle_wq; // removed when castling rights are lost
+static uint64_t zobrist_castle_wk;
+static uint64_t zobrist_castle_bq;
+static uint64_t zobrist_castle_bk;
+static uint64_t zobrist_black_to_move;
 
-int main(int argc, char *argv[]);
+int main();
+void print_moves(board *b);
 void print_analysis(board *b);
+int search(board *b, int ply);
 int evaluate(board *b);
 int evaluate_material(board *b);
 void reset_board(board *b);
 void apply(board *b, move m);
 void unapply(board *b, move m);
 void update_castling_rights_hash(board *b, move m);
-void tt_init();
-void tt_auto_cleanup();
+void tt_init(void);
+void tt_auto_cleanup(void);
 uint64_t tt_hash_position(board *b);
 void tt_put(board *b, evaluation e);
 evaluation *tt_get(board *b);
-void tt_expand();
+void tt_expand(void);
 move *board_moves(board *b, int *count);
 int piece_moves(board *b, coord c, move *list);
 int diagonal_moves(board *b, coord c, move *list, int steps);
 int horizontal_moves(board *b, coord c, move *list, int steps);
 int pawn_moves(board *b, coord c, move *list);
 int castle_moves(board *b, coord c, move *list);
-int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, uint8_t steps);
+int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps);
 bool add_move(board *b, move m, move *list);
-void move_to_string(move m, char str[6]);
+char *move_to_string(move m, char str[6]);
 bool in_check(int col, int row);
-uint64_t rand64();
+uint64_t rand64(void);
 
 static inline bool p_eq(piece a, piece b) {
 	return a.type == b.type && a.white == b.white && a.moved == b.moved;
@@ -148,42 +148,51 @@ static inline uint64_t tt_index(board *b) {
 	return idx;
 }
 
-int main(int argc, char *argv[]) {
+int main() {
+	assert(false);
 	tt_init();
 	board b; 
 	reset_board(&b);
-	int moves = 0;
-	move *list = board_moves(&b, &moves);
+	print_moves(&b);
 	search(&b, 3);
-	printf("Moves available: %d\n", moves);
-	print_analysis(&b);
+	//print_analysis(&b);
 	set(&b, (coord){0, 1}, no_piece);
-	move *list2 = board_moves(&b, &moves);
+	print_moves(&b);
 	search(&b, 3);
-	printf("Moves available: %d\n", moves);
-	print_analysis(&b);
+	//print_analysis(&b);
+	return 0;
+}
+
+void print_moves(board *b) {
+	int movec = 0;
+	move *list = board_moves(b, &movec);
+	printf("%d moves available : ", movec);
+	for (int i = 0; i < movec; i++) {
+		char moveb[6];
+		printf("%s ", move_to_string(list[i], moveb));
+	}
+	printf("\n");
 	free(list);
-	free(list2);
 }
 
 void print_analysis(board *b_orig) {
 	board b_cpy = *b_orig;
 	board *b = &b_cpy;
 	printf("%+.2f ", ((double)tt_get(b)->score)/100);
-	evaluation *next = tt_get(b);
+	evaluation *eval = tt_get(b);
+	assert(eval != NULL);
 	int moveno = 1;
 	if (b->black_to_move) {
 		printf("1...");
 		moveno++;
 	}
-	while (next != NULL) {
+	do {
 		if (!b->black_to_move) printf("%d.", moveno++);
 		char move[6];
-		move_to_string(tt_get(b)->best, move);
-		printf("%s ", move);
-		next = tt_get(b);
-		apply(b, next->best);
-	}
+		printf("%s ", move_to_string(eval->best, move));
+		apply(b, eval->best);
+		eval = tt_get(b);
+	} while (eval != NULL);
 	printf("\n");
 }
 
@@ -200,6 +209,7 @@ int minimax_max(board *b, int ply) {
 	assert(num_children > 0);
 	int score = INT_MIN;
 	for (int i = 0; i < num_children; i++) {
+		uint64_t oldhash = tt_hash_position(b); // debugging
 		apply(b, moves[i]);
 		int child_val = minimax_min(b, ply - 1);
 		if (score < child_val) {
@@ -207,6 +217,7 @@ int minimax_max(board *b, int ply) {
 			best_move = moves[i];
 		}
 		unapply(b, moves[i]);
+		assert(tt_hash_position(b) == oldhash);
 	}
 	tt_put(b, (evaluation){best_move, score});
 	free(moves);
@@ -221,6 +232,7 @@ int minimax_min(board *b, int ply) {
 	assert(num_children > 0);
 	int score = INT_MAX;
 	for (int i = 0; i < num_children; i++) {
+		uint64_t oldhash = tt_hash_position(b); // debugging
 		apply(b, moves[i]);
 		int child_val = minimax_min(b, ply - 1);
 		if (score > child_val) {
@@ -228,6 +240,7 @@ int minimax_min(board *b, int ply) {
 			best_move = moves[i];
 		}
 		unapply(b, moves[i]);
+		assert(tt_hash_position(b) == oldhash);
 	}
 	tt_put(b, (evaluation){best_move, score});
 	free(moves);
@@ -238,7 +251,7 @@ int minimax_min(board *b, int ply) {
 // Positive numbers indicate white advantage.
 // Returns result in centipawns.
 int evaluate(board *b) {
-	float score = 0;
+	int score = 0;
 	score += evaluate_material(b);
 	return score;
 }
@@ -292,18 +305,18 @@ void apply(board *b, move m) {
 	if (!at(b, m.to).moved) m.flipped_moved = true;
 	else m.flipped_moved = false;
 	b->b[m.to.col][m.to.row].moved = true;
-	if (m.c == K) { // castle
+	/*if (m.c == K) { // castle -- manually move rook
 		b->hash ^= tt_pieceval(b, (coord){7, m.to.row});
 		b->b[5][m.to.row] = (piece){'R', at(b, m.to).white, true};
 		b->b[7][m.to.row] = no_piece;
 		b->hash ^= tt_pieceval(b, (coord){5, m.to.row});
-	} else if (m.c == Q) {
+	} else if (m.c == Q) { // castle -- move rook
 		b->hash ^= tt_pieceval(b, (coord){0, m.to.row});
 		b->b[3][m.to.row] = (piece){'R', at(b, m.to).white, true};
 		b->b[0][m.to.row] = no_piece;
 		b->hash ^= tt_pieceval(b, (coord){3, m.to.row});
-	}
-	update_castling_rights_hash(b, m);
+	}*/
+	//update_castling_rights_hash(b, m);
 	b->hash ^= zobrist_black_to_move;
 	b->black_to_move = !b->black_to_move;
 	b->hash ^= tt_pieceval(b, m.to);
@@ -311,14 +324,14 @@ void apply(board *b, move m) {
 
 void unapply(board *b, move m) {
 	b->hash ^= tt_pieceval(b, m.to);
-	update_castling_rights_hash(b, m);
 	b->hash ^= zobrist_black_to_move;
 	b->black_to_move = !b->black_to_move;
+	//update_castling_rights_hash(b, m);
 	piece old_piece = p_eq(m.promote_to, no_piece) ? at(b, m.to) : (piece){'P', at(b, m.to).white, true};
 	set(b, m.from, old_piece);
 	set(b, m.to, m.captured);
 	if (m.flipped_moved) b->b[m.from.col][m.from.row].moved = false;
-	if (m.c == K) { // castle
+	/*if (m.c == K) { // castle
 		b->hash ^= tt_pieceval(b, (coord){5, m.from.row});
 		b->b[7][m.from.row] = (piece){'R', at(b, m.from).white, false};
 		b->b[5][m.from.row] = no_piece;
@@ -328,7 +341,7 @@ void unapply(board *b, move m) {
 		b->b[0][m.from.row] = (piece){'R', at(b, m.from).white, false};
 		b->b[3][m.from.row] = no_piece;
 		b->hash ^= tt_pieceval(b, (coord){0, m.from.row});
-	}
+	}*/
 	b->hash ^= tt_pieceval(b, m.from);
 	b->hash ^= tt_pieceval(b, m.to);
 }
@@ -360,7 +373,7 @@ void update_castling_rights_hash(board *b, move m) {
 }
 
 // Invoke to prepare transposition table
-void tt_init() {
+void tt_init(void) {
 	if (tt_keys != NULL) free(tt_keys);
 	if (tt_values != NULL) free(tt_values);
 	tt_keys = malloc(sizeof(uint64_t) * tt_size);
@@ -369,7 +382,7 @@ void tt_init() {
 	tt_count = 0;
 	tt_rehash_count = ceil(tt_max_load * tt_size);
 
-	srand(time(NULL));
+	srand((unsigned int) time(NULL));
 	for (int i = 0; i < 64; i++) {
 		for (int j = 0; j < 12; j++) {
 			zobrist[i][j] = rand64();
@@ -384,15 +397,15 @@ void tt_init() {
 }
 
 // Automatically called
-void tt_auto_cleanup() {
+void tt_auto_cleanup(void) {
 	free(tt_keys);
 	free(tt_values);
 }
 
 uint64_t tt_hash_position(board *b) {
 	uint64_t hash = 0;
-	for (int i = 0; i < 8; i++) {
-		for (int j = 0; j < 8; j++) {
+	for (uint8_t i = 0; i < 8; i++) {
+		for (uint8_t j = 0; j < 8; j++) {
 			hash ^= tt_pieceval(b, (coord){i, j});
 		}
 	}
@@ -434,7 +447,7 @@ evaluation *tt_get(board *b) {
 	return tt_values + idx;
 }
 
-void tt_expand() {
+void tt_expand(void) {
 	uint64_t new_size = tt_size * 2;
 	uint64_t *new_keys = malloc(sizeof(uint64_t) * new_size);
 	evaluation *new_values = malloc(sizeof(uint64_t) * new_size);
@@ -570,7 +583,7 @@ int castle_moves(board *b, coord c, move *list) {
 
 // Writes all legal moves to an array by sliding from a given origin with some dx and dy for n steps.
 // Stops on capture, board bounds, or blocking.
-int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, uint8_t steps) {
+int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps) {
 	int added = 0;
 	coord curr_c = {orig_c.col, orig_c.row};
 	for (uint8_t s = 1; s <= steps; s++) {
@@ -595,17 +608,19 @@ bool add_move(board *b, move m, move *list) {
 }
 
 // caller must provide a 6-character buffer
-void move_to_string(move m, char str[6]) {
+// returns a pointer to the provided buffer
+char *move_to_string(move m, char str[6]) {
 	str[0] = 'a' + m.from.col;
-	str[1] = 1 + m.from.row;
+	str[1] = '1' + m.from.row;
 	str[2] = 'a' + m.to.col;
-	str[3] = 1 + m.to.row;
+	str[3] = '1' + m.to.row;
 	if (!p_eq(m.promote_to, no_piece)) {
 		str[4] = tolower(m.promote_to.type);
 		str[5] = '\0';
-		return;
+		return str;
 	}
 	str[4] = '\0';
+	return str;
 }
 
 // checks if a given coordinate would be in check on the current board
@@ -613,7 +628,7 @@ bool in_check(int col, int row) {
 	return false; // todo
 }
 
-uint64_t rand64() {
+uint64_t rand64(void) {
     uint64_t r = 0;
     for (int i = 0; i < 5; ++i) {
         r = (r << 15) | (rand() & 0x7FFF);
