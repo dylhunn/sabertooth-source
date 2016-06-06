@@ -1,6 +1,14 @@
 //#define NDEBUG // Disable assertions
 
+/* Optimization TODO list:
+ * - Store sets of pieces by color for use in:
+ *   - board_moves
+ *   - evaluate_material
+ */
+
 #include <assert.h>
+#include <ctype.h>
+#include <limits.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -47,7 +55,7 @@ typedef struct board {
 
 typedef struct evaluation {
 	move best;
-	float score;
+	int score;
 } evaluation;
 
 const piece no_piece = NO_PIECE;
@@ -68,6 +76,9 @@ uint64_t zobrist_castle_bk;
 uint64_t zobrist_black_to_move;
 
 int main(int argc, char *argv[]);
+void print_analysis(board *b);
+int evaluate(board *b);
+int evaluate_material(board *b);
 void reset_board(board *b);
 void apply(board *b, move m);
 void unapply(board *b, move m);
@@ -86,6 +97,7 @@ int pawn_moves(board *b, coord c, move *list);
 int castle_moves(board *b, coord c, move *list);
 int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, uint8_t steps);
 bool add_move(board *b, move m, move *list);
+void move_to_string(move m, char str[6]);
 bool in_check(int col, int row);
 uint64_t rand64();
 
@@ -139,17 +151,118 @@ static inline uint64_t tt_index(board *b) {
 int main(int argc, char *argv[]) {
 	tt_init();
 	board b; 
-	b.black_to_move = false;
 	reset_board(&b);
 	int moves = 0;
 	move *list = board_moves(&b, &moves);
+	search(&b, 3);
 	printf("Moves available: %d\n", moves);
+	print_analysis(&b);
 	set(&b, (coord){0, 1}, no_piece);
 	move *list2 = board_moves(&b, &moves);
+	search(&b, 3);
 	printf("Moves available: %d\n", moves);
+	print_analysis(&b);
 	free(list);
 	free(list2);
-	
+}
+
+void print_analysis(board *b_orig) {
+	board b_cpy = *b_orig;
+	board *b = &b_cpy;
+	printf("%+.2f ", ((double)tt_get(b)->score)/100);
+	evaluation *next = tt_get(b);
+	int moveno = 1;
+	if (b->black_to_move) {
+		printf("1...");
+		moveno++;
+	}
+	while (next != NULL) {
+		if (!b->black_to_move) printf("%d.", moveno++);
+		char move[6];
+		move_to_string(tt_get(b)->best, move);
+		printf("%s ", move);
+		next = tt_get(b);
+		apply(b, next->best);
+	}
+	printf("\n");
+}
+
+int search(board *b, int ply) {
+	if (b->black_to_move) return minimax_min(b, ply);
+	return minimax_max(b, ply);
+}
+
+int minimax_max(board *b, int ply) {
+	if (ply == 0) return evaluate(b);
+	int num_children;
+	move best_move;
+	move *moves = board_moves(b, &num_children);
+	assert(num_children > 0);
+	int score = INT_MIN;
+	for (int i = 0; i < num_children; i++) {
+		apply(b, moves[i]);
+		int child_val = minimax_min(b, ply - 1);
+		if (score < child_val) {
+			score = child_val;
+			best_move = moves[i];
+		}
+		unapply(b, moves[i]);
+	}
+	tt_put(b, (evaluation){best_move, score});
+	free(moves);
+	return score;
+}
+
+int minimax_min(board *b, int ply) {
+	if (ply == 0) return evaluate(b);
+	int num_children;
+	move best_move;
+	move *moves = board_moves(b, &num_children);
+	assert(num_children > 0);
+	int score = INT_MAX;
+	for (int i = 0; i < num_children; i++) {
+		apply(b, moves[i]);
+		int child_val = minimax_min(b, ply - 1);
+		if (score > child_val) {
+			score = child_val;
+			best_move = moves[i];
+		}
+		unapply(b, moves[i]);
+	}
+	tt_put(b, (evaluation){best_move, score});
+	free(moves);
+	return score;
+}
+
+// Statically evaluates a board position.
+// Positive numbers indicate white advantage.
+// Returns result in centipawns.
+int evaluate(board *b) {
+	float score = 0;
+	score += evaluate_material(b);
+	return score;
+}
+
+int evaluate_material(board *b) {
+	int eval = 0;
+	for (int i = 0; i < 8; i++) {
+		for (int j = 0; j < 8; j++) {
+			if (p_eq(no_piece, b->b[i][j])) continue;
+			float piece_val = 0;
+			switch (b->b[i][j].type) {
+				case 'P': piece_val = 100; break;
+				case 'N': piece_val = 320; break;
+				case 'B': piece_val = 330; break;
+				case 'R': piece_val = 500; break;
+				case 'Q': piece_val = 900; break;
+				case 'K': piece_val = 20000; break;
+				default: assert(false);
+			}
+			if (!b->b[i][j].white) piece_val = -piece_val;
+			eval += piece_val;
+		}
+	}
+	return eval;
 }
 
 void reset_board(board *b) {
@@ -167,6 +280,7 @@ void reset_board(board *b) {
 	b->b[3][7] = (piece){'Q', false, false}; // black queen
 	b->b[4][7] = (piece){'K', false, false}; // black king
 	b->hash = tt_hash_position(b);
+	b->black_to_move = false;
 }
 
 void apply(board *b, move m) {
@@ -478,6 +592,20 @@ bool add_move(board *b, move m, move *list) {
 	if (viable) list[0] = m;
 	unapply(b, m);
 	return viable;*/
+}
+
+// caller must provide a 6-character buffer
+void move_to_string(move m, char str[6]) {
+	str[0] = 'a' + m.from.col;
+	str[1] = 1 + m.from.row;
+	str[2] = 'a' + m.to.col;
+	str[3] = 1 + m.to.row;
+	if (!p_eq(m.promote_to, no_piece)) {
+		str[4] = tolower(m.promote_to.type);
+		str[5] = '\0';
+		return;
+	}
+	str[4] = '\0';
 }
 
 // checks if a given coordinate would be in check on the current board
