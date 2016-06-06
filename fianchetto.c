@@ -77,6 +77,8 @@ int main();
 void print_moves(board *b);
 void print_analysis(board *b);
 int search(board *b, int ply);
+int minimax_max(board *b, int ply);
+int minimax_min(board *b, int ply);
 int evaluate(board *b);
 int evaluate_material(board *b);
 void reset_board(board *b);
@@ -380,7 +382,7 @@ void tt_init(void) {
 	memset(tt_keys, 0, tt_size);
 	tt_values = malloc(sizeof(evaluation) * tt_size);
 	tt_count = 0;
-	tt_rehash_count = ceil(tt_max_load * tt_size);
+	tt_rehash_count = (uint64_t) (ceil(tt_max_load * tt_size));
 
 	srand((unsigned int) time(NULL));
 	for (int i = 0; i < 64; i++) {
@@ -463,7 +465,7 @@ void tt_expand(void) {
 	tt_keys = new_keys;
 	tt_values = new_values;
 	tt_size = new_size;
-	tt_rehash_count = ceil(tt_max_load * new_size);
+	tt_rehash_count = (uint64_t) (ceil(tt_max_load * new_size));
 }
 
 // Generates pseudo-legal moves for a player.
@@ -537,28 +539,28 @@ int pawn_moves(board *b, coord c, move *list) {
 	assert(at(b, c).type == 'P');
 	int added = 0;
 	piece cp = at(b, c);
-	int dy = cp.white ? 1 : -1;
+	int8_t dy = cp.white ? 1 : -1;
 	bool promote = (c.row + dy == 0 || c.row + dy == 7); // next move is promotion
 	if (p_eq(at(b, (coord){c.col, c.row + dy}), no_piece)) { // front is clear
 		if (promote) {
 			for (int i = 0; i < 4; i++)
 				if (add_move(b, (move){c, (coord){c.col, c.row + dy}, no_piece, 
-								(piece){promo_p[i], cp.white, true}, N}, list + added)) added++;
+								(piece){promo_p[i], cp.white, true}, N, false}, list + added)) added++;
 		} else {
-			if (add_move(b, (move){c, {c.col, c.row + dy}, no_piece, no_piece, N}, list + added)) added++;
+			if (add_move(b, (move){c, {c.col, c.row + dy}, no_piece, no_piece, N, false}, list + added)) added++;
 			if (!cp.moved && p_eq(at(b, (coord){c.col, c.row + dy + dy}), no_piece)) // double move
 				if (add_move(b, (move){c, (coord){c.col, c.row + dy + dy}, 
-							no_piece, no_piece, N}, list + added)) added++;
+							no_piece, no_piece, N, true}, list + added)) added++;
 		}
 	}
-	for (int dx = -1; dx <= 1; dx += 2) { // both capture directions
+	for (int8_t dx = -1; dx <= 1; dx += 2) { // both capture directions
 		coord cap = {c.col + dx, c.row + dy};
 		if (!in_bounds(cap) || p_eq(at(b, cap), no_piece)) continue;
 		if (promote) {
 			for (int i = 0; i < 4; i++)
 				if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), 
-								(piece){promo_p[i], cp.white, true}, N}, list + added)) added++;
-		} else if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N}, list + added)) 
+								(piece){promo_p[i], cp.white, true}, N, false}, list + added)) added++;
+		} else if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N, false}, list + added)) 
 			added++;
 	}
 	return added;
@@ -568,16 +570,16 @@ int pawn_moves(board *b, coord c, move *list) {
 int castle_moves(board *b, coord c, move *list) {
 	assert(at(b, c).type == 'K');
 	int added = 0;
-	int row = at(b, c).white ? 0 : 7;
+	uint8_t row = at(b, c).white ? 0 : 7;
 	if (at(b, c).moved || /*c != (coord){4, row} || */in_check(c.col, c.row)) return 0;
 	bool k_r_path_clear = true;
 	bool q_r_path_clear = true;
 	for (int i = 5; i <= 6; i++) if (!p_eq(b->b[i][row], no_piece) || in_check(i, row)) {k_r_path_clear = false; break;};
 	for (int i = 3; i >= 1; i--) if (!p_eq(b->b[i][row], no_piece) || in_check(i, row)) {q_r_path_clear = false; break;};
 	if (!at(b, (coord){7, row}).moved && k_r_path_clear) 
-		if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K}, list + added)) added++;
+		if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K, false}, list + added)) added++;
 	if (!at(b, (coord){0, row}).moved && q_r_path_clear) 
-		if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added)) added++;
+		if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q, false}, list + added)) added++;
 	return added;
 }
 
@@ -591,7 +593,7 @@ int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps) {
 		curr_c.row += dy;
 		if (!in_bounds(curr_c)) break; // left board bounds
 		if (!p_eq(at(b, curr_c), no_piece) && at(b, curr_c).white == at(b, orig_c).white) break; // blocked
-		if (add_move(b, (move){orig_c, curr_c, at(b, curr_c), no_piece, N}, list + added)) added++; // freely move
+		if (add_move(b, (move){orig_c, curr_c, at(b, curr_c), no_piece, N, false}, list + added)) added++; // freely move
 		if (!p_eq(at(b, curr_c), no_piece)) break; // captured
 	}
 	return added;
@@ -615,7 +617,7 @@ char *move_to_string(move m, char str[6]) {
 	str[2] = 'a' + m.to.col;
 	str[3] = '1' + m.to.row;
 	if (!p_eq(m.promote_to, no_piece)) {
-		str[4] = tolower(m.promote_to.type);
+		str[4] = (char) (tolower(m.promote_to.type));
 		str[5] = '\0';
 		return str;
 	}
