@@ -16,10 +16,19 @@
 #include <time.h>
 
 #define NO_COORD {255, 255}
-#define NO_PIECE {'0', false, false}
+#define NO_PIECE {'0', false}
 
 // starting size is prime number
 #define TT_STARTING_SIZE 15485867
+
+#define RED   "\x1B[31m"
+#define GRN   "\x1B[32m"
+#define YEL   "\x1B[33m"
+#define BLU   "\x1B[34m"
+#define MAG   "\x1B[35m"
+#define CYN   "\x1B[36m"
+#define WHT   "\x1B[37m"
+#define RESET "\x1B[0m"
 
 typedef enum castle {
 	N, K, Q // castle directions
@@ -28,7 +37,6 @@ typedef enum castle {
 typedef struct piece {
 	char type;
 	bool white;
-	bool moved;
 } piece;
 
 typedef struct coord {
@@ -42,13 +50,23 @@ typedef struct move {
 	piece captured;
 	piece promote_to;
 	castle c;
-	bool flipped_moved;
 } move;
 
 typedef struct board {
 	piece b[8][8]; // cols then rows
 	uint64_t hash;
 	bool black_to_move;
+	bool castle_rights_wq; // can castle on this side
+	bool castle_rights_wk;
+	bool castle_rights_bq;
+	bool castle_rights_bk;
+
+	// below fields do not affect board equality (or hashing)
+	int castle_wq_lost_on_ply;
+	int castle_wk_lost_on_ply;
+	int castle_bq_lost_on_ply;
+	int castle_bk_lost_on_ply;
+	int last_move_ply; // the ply number of the last move applied
 } board;
 
 typedef struct evaluation {
@@ -57,9 +75,14 @@ typedef struct evaluation {
 } evaluation;
 
 static const piece no_piece = NO_PIECE;
-static const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE, N, false};
+static const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE, N};
 static const char promo_p[] = {'Q', 'N', 'B', 'R'}; // promotion targets
 static const double tt_max_load = .7; // re-hash at 70% load factor
+
+static const coord wqr = (coord) {0, 0}; // Rook squares
+static const coord wkr = (coord) {7, 0};
+static const coord bqr = (coord) {0, 7};
+static const coord bkr = (coord) {7, 7};
 
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
@@ -73,8 +96,9 @@ static uint64_t zobrist_castle_bq;
 static uint64_t zobrist_castle_bk;
 static uint64_t zobrist_black_to_move;
 
-int main();
+int repl(void);
 void print_moves(board *b);
+void print_board(board *b);
 void print_analysis(board *b);
 int search(board *b, int ply);
 int minimax_max(board *b, int ply);
@@ -100,11 +124,12 @@ int castle_moves(board *b, coord c, move *list);
 int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps);
 bool add_move(board *b, move m, move *list);
 char *move_to_string(move m, char str[6]);
+bool string_to_move(board *b, char *str, move *m);
 bool in_check(int col, int row);
 uint64_t rand64(void);
 
 static inline bool p_eq(piece a, piece b) {
-	return a.type == b.type && a.white == b.white && a.moved == b.moved;
+	return a.type == b.type && a.white == b.white;
 }
 
 static inline bool c_eq(coord a, coord b) {
@@ -151,30 +176,73 @@ static inline uint64_t tt_index(board *b) {
 }
 
 int main() {
-	assert(false);
+	repl();
+	return 0;
+}
+
+int repl(void) {
 	tt_init();
 	board b; 
 	reset_board(&b);
-	print_moves(&b);
-	search(&b, 3);
-	//print_analysis(&b);
-	set(&b, (coord){0, 1}, no_piece);
-	print_moves(&b);
-	search(&b, 3);
-	//print_analysis(&b);
-	return 0;
+	while (true) {
+		print_board(&b);
+		printf("Commands: \"e n\" evaluates to depth n; \"m a1a2\" makes a move.\n\n");
+		char buffer[100];
+		fgets(buffer, 99, stdin);
+		int edepth = buffer[2] - '0';
+		move m;
+		switch(buffer[0]) {
+			case 'e':
+				search(&b, edepth);
+				print_analysis(&b);
+				printf("\n");
+				break;
+			case 'm':
+				if (!string_to_move(&b, buffer + 2, &m)) {
+					move_to_string(m, buffer);
+					printf("Invalid move: %s\n", buffer);
+
+				} else {
+					printf("Read move: %s\n", move_to_string(m, buffer));
+					apply(&b, m);
+				}
+				printf("\n");
+				break;
+			default:
+				printf("Unrecognized command.\n\n");
+		}
+	}
+
 }
 
 void print_moves(board *b) {
 	int movec = 0;
 	move *list = board_moves(b, &movec);
-	printf("%d moves available : ", movec);
+	printf("%d moves available: ", movec);
 	for (int i = 0; i < movec; i++) {
 		char moveb[6];
 		printf("%s ", move_to_string(list[i], moveb));
 	}
 	printf("\n");
 	free(list);
+}
+
+void print_board(board *b) {
+	for (int i = 7; i >= 0; i--) {
+		printf(BLU "%d " RESET, i+1);
+		for (int j = 0; j <= 7; j++) {
+			if (p_eq(b->b[j][i], no_piece)) printf(" ");
+			else {
+				if (b->b[j][i].white) printf(WHT "%c" RESET, b->b[j][i].type);
+				else  printf(YEL "%c" RESET, b->b[j][i].type);
+			}
+		}
+		printf("\n");
+	}
+	printf(BLU "  ABCDEFGH\n\n" RESET);
+	printf("%s to move.\n", b->black_to_move ? "Black" : "White");
+	print_moves(b);
+	printf("\n");
 }
 
 void print_analysis(board *b_orig) {
@@ -235,13 +303,21 @@ int minimax_min(board *b, int ply) {
 	int score = INT_MAX;
 	for (int i = 0; i < num_children; i++) {
 		uint64_t oldhash = tt_hash_position(b); // debugging
+		//print_board(b);
 		apply(b, moves[i]);
+		//print_board(b);
 		int child_val = minimax_min(b, ply - 1);
 		if (score > child_val) {
 			score = child_val;
 			best_move = moves[i];
 		}
 		unapply(b, moves[i]);
+		/*if (tt_hash_position(b) != oldhash) {
+			print_board(b);
+			char mv[6];
+			move_to_string(moves[i], mv);
+			printf("Chosen move: %s\n", mv);
+		}*/
 		assert(tt_hash_position(b) == oldhash);
 	}
 	tt_put(b, (evaluation){best_move, score});
@@ -282,96 +358,153 @@ int evaluate_material(board *b) {
 
 void reset_board(board *b) {
 	for (int i = 16; i < 48; i++) b->b[i%8][i/8] = no_piece; // empty squares
-	for (int i = 0; i < 8; i++) b->b[i][1] = (piece){'P', true, false}; // white pawns
-	b->b[0][0] = b->b[7][0] = (piece){'R', true, false}; // white rooks
-	b->b[1][0] = b->b[6][0] = (piece){'N', true, false}; // white knights
-	b->b[2][0] = b->b[5][0] = (piece){'B', true, false}; // white bishops
-	b->b[3][0] = (piece){'Q', true, false}; // white queen
-	b->b[4][0] = (piece){'K', true, false}; // white king
-	for (int i = 0; i < 8; i++) b->b[i][6] = (piece){'P', false, false}; // black pawns
-	b->b[0][7] = b->b[7][7] = (piece){'R', false, false}; // black rooks
-	b->b[1][7] = b->b[6][7] = (piece){'N', false, false}; // black knights
-	b->b[2][7] = b->b[5][7] = (piece){'B', false, false}; // black bishops
-	b->b[3][7] = (piece){'Q', false, false}; // black queen
-	b->b[4][7] = (piece){'K', false, false}; // black king
-	b->hash = tt_hash_position(b);
+	for (int i = 0; i < 8; i++) b->b[i][1] = (piece){'P', true}; // white pawns
+	b->b[0][0] = b->b[7][0] = (piece){'R', true}; // white rooks
+	b->b[1][0] = b->b[6][0] = (piece){'N', true}; // white knights
+	b->b[2][0] = b->b[5][0] = (piece){'B', true}; // white bishops
+	b->b[3][0] = (piece){'Q', true}; // white queen
+	b->b[4][0] = (piece){'K', true}; // white king
+	for (int i = 0; i < 8; i++) b->b[i][6] = (piece){'P', false}; // black pawns
+	b->b[0][7] = b->b[7][7] = (piece){'R', false}; // black rooks
+	b->b[1][7] = b->b[6][7] = (piece){'N', false}; // black knights
+	b->b[2][7] = b->b[5][7] = (piece){'B', false}; // black bishops
+	b->b[3][7] = (piece){'Q', false}; // black queen
+	b->b[4][7] = (piece){'K', false}; // black king
 	b->black_to_move = false;
+	b->castle_rights_wq = true;
+	b->castle_rights_wk = true;
+	b->castle_rights_bq = true;
+	b->castle_rights_bk = true;
+	b->castle_wq_lost_on_ply = -1;
+	b->castle_wk_lost_on_ply = -1;
+	b->castle_bq_lost_on_ply = -1;
+	b->castle_bk_lost_on_ply = -1;
+	b->last_move_ply = 0;
+	b->hash = tt_hash_position(b);
 }
 
 void apply(board *b, move m) {
+	// Information
+	piece moved_piece = at(b, m.from);
+	piece new_piece = p_eq(m.promote_to, no_piece) ? at(b, m.from) : m.promote_to;
+
+	// Transform board and hash
 	b->hash ^= tt_pieceval(b, m.from);
 	b->hash ^= tt_pieceval(b, m.to);
-	piece new_piece = p_eq(m.promote_to, no_piece) ? at(b, m.from) : m.promote_to;
 	set(b, m.to, new_piece);
 	set(b, m.from, no_piece);
-	if (!at(b, m.to).moved) m.flipped_moved = true;
-	else m.flipped_moved = false;
-	b->b[m.to.col][m.to.row].moved = true;
-	/*if (m.c == K) { // castle -- manually move rook
-		b->hash ^= tt_pieceval(b, (coord){7, m.to.row});
-		b->b[5][m.to.row] = (piece){'R', at(b, m.to).white, true};
-		b->b[7][m.to.row] = no_piece;
-		b->hash ^= tt_pieceval(b, (coord){5, m.to.row});
-	} else if (m.c == Q) { // castle -- move rook
-		b->hash ^= tt_pieceval(b, (coord){0, m.to.row});
-		b->b[3][m.to.row] = (piece){'R', at(b, m.to).white, true};
-		b->b[0][m.to.row] = no_piece;
-		b->hash ^= tt_pieceval(b, (coord){3, m.to.row});
-	}*/
-	//update_castling_rights_hash(b, m);
+	b->hash ^= tt_pieceval(b, m.to);
 	b->hash ^= zobrist_black_to_move;
 	b->black_to_move = !b->black_to_move;
-	b->hash ^= tt_pieceval(b, m.to);
+	b->last_move_ply++;
+
+	// Manually move rook for castling
+	if (m.c != N) { // Manually move rook
+		uint8_t rook_from_col = ((m.c == K) ? 7 : 0);
+		uint8_t rook_to_col = ((m.c == K) ? 5 : 3);
+		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.to.row});
+		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white};
+		b->b[rook_from_col][m.to.row] = no_piece;
+		b->hash ^= tt_pieceval(b, (coord){rook_to_col, m.to.row});
+	}
+
+	// King moves always strip castling rights
+	if (moved_piece.white && moved_piece.type == 'K') {
+		if (b->castle_rights_wk) {
+			b->hash ^= zobrist_castle_wk;
+			b->castle_wk_lost_on_ply = b->last_move_ply;
+			b->castle_rights_wk = false;
+		}
+		if (b->castle_rights_wq) {
+			b->hash ^= zobrist_castle_wq;
+			b->castle_wq_lost_on_ply = b->last_move_ply;
+			b->castle_rights_wq = false;
+		}
+	} else if (!moved_piece.white && moved_piece.type == 'K') {
+		if (b->castle_rights_bk) {
+			b->hash ^= zobrist_castle_bk;
+			b->castle_bk_lost_on_ply = b->last_move_ply;
+			b->castle_rights_bk = false;
+		}
+		if (b->castle_rights_bq) {
+			b->hash ^= zobrist_castle_bq;
+			b->castle_bq_lost_on_ply = b->last_move_ply;
+			b->castle_rights_bq = false;
+		}
+	}
+
+	// Moves involving rook squares always strip castling rights
+	if (c_eq(m.from, wqr) && b->castle_rights_wq) {
+		b->castle_rights_wq = false;
+		b->hash ^= zobrist_castle_wq;
+		b->castle_wq_lost_on_ply = b->last_move_ply;
+	}
+	if (c_eq(m.from, wkr) && b->castle_rights_wk) {
+		b->castle_rights_wk = false;
+		b->hash ^= zobrist_castle_wk;
+		b->castle_wk_lost_on_ply = b->last_move_ply;
+	}
+	if (c_eq(m.from, bqr) && b->castle_rights_bq) {
+		b->castle_rights_bq = false;
+		b->hash ^= zobrist_castle_bq;
+		b->castle_bq_lost_on_ply = b->last_move_ply;
+	}
+	if (c_eq(m.from, bkr) && b->castle_rights_bk) {
+		b->castle_rights_bk = false;
+		b->hash ^= zobrist_castle_bk;
+		b->castle_bk_lost_on_ply = b->last_move_ply;
+	}
+
+	assert(b->hash == tt_hash_position(b));
 }
 
 void unapply(board *b, move m) {
+	// Information
+	piece old_piece = p_eq(m.promote_to, no_piece) ? at(b, m.to) : (piece){'P', at(b, m.to).white};
+
+	// Transform board and hash
+	b->hash ^= tt_pieceval(b, m.to);
+	set(b, m.from, old_piece);
+	set(b, m.to, m.captured);
+	b->hash ^= tt_pieceval(b, m.from);
 	b->hash ^= tt_pieceval(b, m.to);
 	b->hash ^= zobrist_black_to_move;
 	b->black_to_move = !b->black_to_move;
-	//update_castling_rights_hash(b, m);
-	piece old_piece = p_eq(m.promote_to, no_piece) ? at(b, m.to) : (piece){'P', at(b, m.to).white, true};
-	set(b, m.from, old_piece);
-	set(b, m.to, m.captured);
-	if (m.flipped_moved) b->b[m.from.col][m.from.row].moved = false;
-	/*if (m.c == K) { // castle
-		b->hash ^= tt_pieceval(b, (coord){5, m.from.row});
-		b->b[7][m.from.row] = (piece){'R', at(b, m.from).white, false};
-		b->b[5][m.from.row] = no_piece;
-		b->hash ^= tt_pieceval(b, (coord){7, m.from.row});
-	} else if (m.c == Q) {
-		b->hash ^= tt_pieceval(b, (coord){3, m.from.row});
-		b->b[0][m.from.row] = (piece){'R', at(b, m.from).white, false};
-		b->b[3][m.from.row] = no_piece;
-		b->hash ^= tt_pieceval(b, (coord){0, m.from.row});
-	}*/
-	b->hash ^= tt_pieceval(b, m.from);
-	b->hash ^= tt_pieceval(b, m.to);
-}
+	b->last_move_ply--;
+	
+	// Manually move rook for castling
+	if (m.c != N) { // Manually move rook
+		uint8_t rook_to_col = ((m.c == K) ? 7 : 0);
+		uint8_t rook_from_col = ((m.c == K) ? 5 : 3);
+		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.to.row});
+		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white};
+		b->b[rook_from_col][m.to.row] = no_piece;
+		b->hash ^= tt_pieceval(b, (coord){rook_to_col, m.to.row});
+	}
 
-// If m was the first move of a rook or king, revokes castling rights in the hash.
-// Call this AFTER applying m to b, or BEFORE m is unapplied.
-// Relies on the flipped_moved field.
-void update_castling_rights_hash(board *b, move m) {
-	if (!m.flipped_moved) return;
-	bool isKing = at(b, m.to).type == 'K';
-	bool isRook = at(b, m.to).type == 'R';
-	if (!isKing && !isRook) return;
-	bool isWhite = at(b, m.to).white;
-	// castling strips rights
-	if (m.c == Q && isWhite) b->hash ^= zobrist_castle_wq;
-	if (m.c == K && isWhite) b->hash ^= zobrist_castle_wk;
-	if (m.c == Q && !isWhite) b->hash ^= zobrist_castle_bq;
-	if (m.c == K && !isWhite) b->hash ^= zobrist_castle_bk;
-	if (isKing && isWhite) {
+	// Restore castling rights
+	if (b->castle_wq_lost_on_ply == b->last_move_ply + 1) {
+		b->castle_rights_wq = true;
 		b->hash ^= zobrist_castle_wq;
+		b->castle_wq_lost_on_ply = -1;
+	}
+	if (b->castle_wk_lost_on_ply == b->last_move_ply + 1) {
+		b->castle_rights_wk = true;
 		b->hash ^= zobrist_castle_wk;
-	} else if (isKing) {
+		b->castle_wk_lost_on_ply = -1;
+	}
+	if (b->castle_bq_lost_on_ply == b->last_move_ply + 1) {
+		b->castle_rights_bq = true;
 		b->hash ^= zobrist_castle_bq;
+		b->castle_bq_lost_on_ply = -1;
+	}
+	if (b->castle_bk_lost_on_ply == b->last_move_ply + 1) {
+		b->castle_rights_bk = true;
 		b->hash ^= zobrist_castle_bk;
-	} else if (isRook && isWhite && m.from.col == 0) b->hash ^= zobrist_castle_wq;
-	else if (isRook && !isWhite && m.from.col == 0) b->hash ^= zobrist_castle_bq;
-	else if (isRook && isWhite) b->hash ^= zobrist_castle_wk; 
-	else if (isRook && !isWhite) b->hash ^= zobrist_castle_bk;
+		b->castle_bk_lost_on_ply = -1;
+	}
+
+	assert(b->hash == tt_hash_position(b));
 }
 
 // Invoke to prepare transposition table
@@ -412,29 +545,15 @@ uint64_t tt_hash_position(board *b) {
 		}
 	}
 	if (b->black_to_move) hash ^= zobrist_black_to_move;
-
-	// white castling
-	if (b->b[4][0].type == 'K' && !b->b[4][0].moved) {
-		if (b->b[0][0].type == 'R' && !b->b[0][0].moved) {
-			hash ^= zobrist_castle_wq;
-		}
-		if (b->b[7][0].type == 'R' && !b->b[7][0].moved) {
-			hash ^= zobrist_castle_wk;
-		}
-	}
-	// black castling
-	if (b->b[4][7].type == 'K' && !b->b[4][7].moved) {
-		if (b->b[0][7].type == 'R' && !b->b[0][7].moved) {
-			hash ^= zobrist_castle_bq;
-		}
-		if (b->b[7][7].type == 'R' && !b->b[7][7].moved) {
-			hash ^= zobrist_castle_bk;
-		}
-	}
+	if (b->castle_rights_wq) hash ^= zobrist_castle_wq;
+	if (b->castle_rights_wk) hash ^= zobrist_castle_wk;
+	if (b->castle_rights_bq) hash ^= zobrist_castle_bq;
+	if (b->castle_rights_bk) hash ^= zobrist_castle_bk;
 	return hash;
 }
 
 void tt_put(board *b, evaluation e) {
+	assert(tt_hash_position(b) == b->hash);
 	if (tt_count >= tt_rehash_count) tt_expand();
 	uint64_t idx = tt_index(b);
 	if (tt_keys[idx] == 0) tt_count++;
@@ -539,18 +658,19 @@ int pawn_moves(board *b, coord c, move *list) {
 	assert(at(b, c).type == 'P');
 	int added = 0;
 	piece cp = at(b, c);
+	bool unmoved = (c.row == 1 && cp.white) || (c.row == 6 && !cp.white);
 	int8_t dy = cp.white ? 1 : -1;
 	bool promote = (c.row + dy == 0 || c.row + dy == 7); // next move is promotion
 	if (p_eq(at(b, (coord){c.col, c.row + dy}), no_piece)) { // front is clear
 		if (promote) {
 			for (int i = 0; i < 4; i++)
 				if (add_move(b, (move){c, (coord){c.col, c.row + dy}, no_piece, 
-								(piece){promo_p[i], cp.white, true}, N, false}, list + added)) added++;
+								(piece){promo_p[i], cp.white}, N}, list + added)) added++;
 		} else {
-			if (add_move(b, (move){c, {c.col, c.row + dy}, no_piece, no_piece, N, false}, list + added)) added++;
-			if (!cp.moved && p_eq(at(b, (coord){c.col, c.row + dy + dy}), no_piece)) // double move
+			if (add_move(b, (move){c, {c.col, c.row + dy}, no_piece, no_piece, N}, list + added)) added++;
+			if (unmoved && p_eq(at(b, (coord){c.col, c.row + dy + dy}), no_piece)) // double move
 				if (add_move(b, (move){c, (coord){c.col, c.row + dy + dy}, 
-							no_piece, no_piece, N, true}, list + added)) added++;
+							no_piece, no_piece, N}, list + added)) added++;
 		}
 	}
 	for (int8_t dx = -1; dx <= 1; dx += 2) { // both capture directions
@@ -559,8 +679,8 @@ int pawn_moves(board *b, coord c, move *list) {
 		if (promote) {
 			for (int i = 0; i < 4; i++)
 				if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), 
-								(piece){promo_p[i], cp.white, true}, N, false}, list + added)) added++;
-		} else if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N, false}, list + added)) 
+								(piece){promo_p[i], cp.white}, N}, list + added)) added++;
+		} else if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N}, list + added)) 
 			added++;
 	}
 	return added;
@@ -571,15 +691,24 @@ int castle_moves(board *b, coord c, move *list) {
 	assert(at(b, c).type == 'K');
 	int added = 0;
 	uint8_t row = at(b, c).white ? 0 : 7;
-	if (at(b, c).moved || /*c != (coord){4, row} || */in_check(c.col, c.row)) return 0;
+	bool isWhite = at(b, c).white;
+	if (in_check(c.col, c.row)) return 0;
 	bool k_r_path_clear = true;
 	bool q_r_path_clear = true;
 	for (int i = 5; i <= 6; i++) if (!p_eq(b->b[i][row], no_piece) || in_check(i, row)) {k_r_path_clear = false; break;};
 	for (int i = 3; i >= 1; i--) if (!p_eq(b->b[i][row], no_piece) || in_check(i, row)) {q_r_path_clear = false; break;};
-	if (!at(b, (coord){7, row}).moved && k_r_path_clear) 
-		if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K, false}, list + added)) added++;
-	if (!at(b, (coord){0, row}).moved && q_r_path_clear) 
-		if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q, false}, list + added)) added++;
+	if (k_r_path_clear) {
+		if (isWhite && b->castle_rights_wk) {
+			if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K}, list + added)) added++;
+		} else if (!isWhite && b->castle_rights_bk) 
+			if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K}, list + added)) added++;
+	}
+	if (q_r_path_clear) {
+		if (isWhite && b->castle_rights_wq) {
+			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, K}, list + added)) added++;
+		} else if (!isWhite && b->castle_rights_bq) 
+			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, K}, list + added)) added++;
+	}
 	return added;
 }
 
@@ -593,7 +722,7 @@ int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps) {
 		curr_c.row += dy;
 		if (!in_bounds(curr_c)) break; // left board bounds
 		if (!p_eq(at(b, curr_c), no_piece) && at(b, curr_c).white == at(b, orig_c).white) break; // blocked
-		if (add_move(b, (move){orig_c, curr_c, at(b, curr_c), no_piece, N, false}, list + added)) added++; // freely move
+		if (add_move(b, (move){orig_c, curr_c, at(b, curr_c), no_piece, N}, list + added)) added++; // freely move
 		if (!p_eq(at(b, curr_c), no_piece)) break; // captured
 	}
 	return added;
@@ -623,6 +752,53 @@ char *move_to_string(move m, char str[6]) {
 	}
 	str[4] = '\0';
 	return str;
+}
+
+// Checks if a move is valid
+bool string_to_move(board *b, char *str, move *m) {
+	m->from = (coord) {str[0] - 'a', str[1] - '1'};
+	m->to = (coord) {str[2] - 'a', str[3] - '1'};
+	if (!in_bounds(m->from)) goto fail;
+	if (!in_bounds(m->to)) goto fail;
+	m->captured = at(b, m->to);
+	putchar(str[4]);
+	switch(str[4]) {
+		case '\n':
+			m->promote_to = no_piece;
+			break;
+		case 'q':
+			m->promote_to = (piece){'Q', at(b, m->from).white};
+			break;
+		case 'n':
+			m->promote_to = (piece){'N', at(b, m->from).white};
+			break;
+		case 'r':
+			m->promote_to = (piece){'R', at(b, m->from).white};
+			break;
+		case 'b':
+			m->promote_to = (piece){'B', at(b, m->from).white};
+			break;
+		default:
+			goto fail;
+	}
+
+	if (m->to.col == m->from.col + 2) m->c = K;
+	else if (m->to.col == m->from.col - 3) m->c = Q;
+	else m->c = N;
+
+	bool found = false;
+	int nMoves;
+	move *moves;
+	moves = board_moves(b, &nMoves);
+	for (int i = 0; i < nMoves; i++)
+		if (m_eq(moves[i], *m)) found = true;
+	if (!found) {
+		goto fail;
+	}
+	free(moves);
+
+	return true;
+	fail: return false;;
 }
 
 // checks if a given coordinate would be in check on the current board
