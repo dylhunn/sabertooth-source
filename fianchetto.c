@@ -21,12 +21,8 @@
 // starting size is prime number
 #define TT_STARTING_SIZE 15485867
 
-#define RED   "\x1B[31m"
-#define GRN   "\x1B[32m"
 #define YEL   "\x1B[33m"
 #define BLU   "\x1B[34m"
-#define MAG   "\x1B[35m"
-#define CYN   "\x1B[36m"
 #define WHT   "\x1B[37m"
 #define RESET "\x1B[0m"
 
@@ -251,9 +247,9 @@ void print_analysis(board *b_orig) {
 	printf("%+.2f ", ((double)tt_get(b)->score)/100);
 	evaluation *eval = tt_get(b);
 	assert(eval != NULL);
-	int moveno = 1;
+	int moveno = (b->last_move_ply+2)/2;
 	if (b->black_to_move) {
-		printf("1...");
+		printf("%d...", moveno);
 		moveno++;
 	}
 	do {
@@ -306,7 +302,7 @@ int minimax_min(board *b, int ply) {
 		//print_board(b);
 		apply(b, moves[i]);
 		//print_board(b);
-		int child_val = minimax_min(b, ply - 1);
+		int child_val = minimax_max(b, ply - 1);
 		if (score > child_val) {
 			score = child_val;
 			best_move = moves[i];
@@ -761,7 +757,6 @@ bool string_to_move(board *b, char *str, move *m) {
 	if (!in_bounds(m->from)) goto fail;
 	if (!in_bounds(m->to)) goto fail;
 	m->captured = at(b, m->to);
-	putchar(str[4]);
 	switch(str[4]) {
 		case '\n':
 			m->promote_to = no_piece;
