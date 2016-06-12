@@ -18,13 +18,13 @@
 #define NO_COORD {255, 255}
 #define NO_PIECE {'0', false}
 
-// starting size is prime number
-#define TT_STARTING_SIZE 15485867
+// starting size is prime number //15485867
+#define TT_STARTING_SIZE 15485867 
 
-#define YEL   "\x1B[33m"
-#define BLU   "\x1B[34m"
-#define WHT   "\x1B[37m"
-#define RESET "\x1B[0m"
+#define cYEL   "\x1B[33m"
+#define cBLU   "\x1B[34m"
+#define cWHT   "\x1B[37m"
+#define cRESET "\x1B[0m"
 
 typedef enum castle {
 	N, K, Q // castle directions
@@ -83,7 +83,7 @@ static const coord bkr = (coord) {7, 7};
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
 static uint64_t tt_size = TT_STARTING_SIZE;
-static uint64_t tt_count = 0;
+static uint64_t tt_count;
 static uint64_t tt_rehash_count; // computed based on max_load
 static uint64_t zobrist[64][12]; // zobrist table for pieces
 static uint64_t zobrist_castle_wq; // removed when castling rights are lost
@@ -110,7 +110,7 @@ void tt_auto_cleanup(void);
 uint64_t tt_hash_position(board *b);
 void tt_put(board *b, evaluation e);
 evaluation *tt_get(board *b);
-void tt_expand(void);
+bool tt_expand(void);
 move *board_moves(board *b, int *count);
 int piece_moves(board *b, coord c, move *list);
 int diagonal_moves(board *b, coord c, move *list, int steps);
@@ -149,14 +149,14 @@ static inline void set(board *b, coord c, piece p) {
 }
 
 static inline int square_code(coord c) {
-	return (c.col-1)*8+c.row;
+	return (c.col)*8+c.row;
 }
 
 static inline uint64_t tt_pieceval(board *b, coord c) {
 	int piece_code = 0;
 	piece p = at(b, c);
 	if (p_eq(p, no_piece)) return 0;
-	if (p.white) piece_code += 6;
+	if (!p.white) piece_code += 6;
 	if (p.type == 'N') piece_code += 1;
 	else if (p.type == 'B') piece_code += 2;
 	else if (p.type == 'R') piece_code += 3;
@@ -182,10 +182,10 @@ int repl(void) {
 	reset_board(&b);
 	while (true) {
 		print_board(&b);
-		printf("Commands: \"e n\" evaluates to depth n; \"m a1a2\" makes a move.\n\n");
+		printf("Commands: \"e3\" evaluates to depth 3; \"ma1a2\" makes the move a1a2; \"q\" quits.\n\n");
 		char buffer[100];
 		fgets(buffer, 99, stdin);
-		int edepth = buffer[2] - '0';
+		int edepth = buffer[1] - '0';
 		move m;
 		switch(buffer[0]) {
 			case 'e':
@@ -194,7 +194,7 @@ int repl(void) {
 				printf("\n");
 				break;
 			case 'm':
-				if (!string_to_move(&b, buffer + 2, &m)) {
+				if (!string_to_move(&b, buffer + 1, &m)) {
 					move_to_string(m, buffer);
 					printf("Invalid move: %s\n", buffer);
 
@@ -204,6 +204,8 @@ int repl(void) {
 				}
 				printf("\n");
 				break;
+			case 'q':
+				exit(0);
 			default:
 				printf("Unrecognized command.\n\n");
 		}
@@ -225,18 +227,24 @@ void print_moves(board *b) {
 
 void print_board(board *b) {
 	for (int i = 7; i >= 0; i--) {
-		printf(BLU "%d " RESET, i+1);
+		printf(cBLU "%d " cRESET, i+1);
 		for (int j = 0; j <= 7; j++) {
 			if (p_eq(b->b[j][i], no_piece)) printf(" ");
 			else {
-				if (b->b[j][i].white) printf(WHT "%c" RESET, b->b[j][i].type);
-				else  printf(YEL "%c" RESET, b->b[j][i].type);
+				if (b->b[j][i].white) printf(cWHT "%c" cRESET, b->b[j][i].type);
+				else printf(cYEL "%c" cRESET, b->b[j][i].type);
 			}
 		}
 		printf("\n");
 	}
-	printf(BLU "  ABCDEFGH\n\n" RESET);
-	printf("%s to move.\n", b->black_to_move ? "Black" : "White");
+	printf(cBLU "  ABCDEFGH\n" cRESET);
+	printf("Castling rights: ");
+	if (b->castle_rights_wq) printf("white queenside; ");
+	if (b->castle_rights_wk) printf("white kingside; ");
+	if (b->castle_rights_bq) printf("black queenside; ");
+	if (b->castle_rights_bk) printf("black kingside; ");
+
+	printf("\n%s to move.\n\n", b->black_to_move ? "Black" : "White");
 	print_moves(b);
 	printf("\n");
 }
@@ -275,7 +283,9 @@ int minimax_max(board *b, int ply) {
 	assert(num_children > 0);
 	int score = INT_MIN;
 	for (int i = 0; i < num_children; i++) {
-		uint64_t oldhash = tt_hash_position(b); // debugging
+		#ifndef NDEBUG
+		//uint64_t oldhash = tt_hash_position(b); 
+		#endif
 		apply(b, moves[i]);
 		int child_val = minimax_min(b, ply - 1);
 		if (score < child_val) {
@@ -283,7 +293,7 @@ int minimax_max(board *b, int ply) {
 			best_move = moves[i];
 		}
 		unapply(b, moves[i]);
-		assert(tt_hash_position(b) == oldhash);
+		//assert(tt_hash_position(b) == oldhash);
 	}
 	tt_put(b, (evaluation){best_move, score});
 	free(moves);
@@ -298,23 +308,17 @@ int minimax_min(board *b, int ply) {
 	assert(num_children > 0);
 	int score = INT_MAX;
 	for (int i = 0; i < num_children; i++) {
-		uint64_t oldhash = tt_hash_position(b); // debugging
-		//print_board(b);
+		#ifndef NDEBUG
+		//uint64_t oldhash = tt_hash_position(b); // debugging
+		#endif
 		apply(b, moves[i]);
-		//print_board(b);
 		int child_val = minimax_max(b, ply - 1);
 		if (score > child_val) {
 			score = child_val;
 			best_move = moves[i];
 		}
 		unapply(b, moves[i]);
-		/*if (tt_hash_position(b) != oldhash) {
-			print_board(b);
-			char mv[6];
-			move_to_string(moves[i], mv);
-			printf("Chosen move: %s\n", mv);
-		}*/
-		assert(tt_hash_position(b) == oldhash);
+		//assert(tt_hash_position(b) == oldhash);
 	}
 	tt_put(b, (evaluation){best_move, score});
 	free(moves);
@@ -398,9 +402,9 @@ void apply(board *b, move m) {
 	if (m.c != N) { // Manually move rook
 		uint8_t rook_from_col = ((m.c == K) ? 7 : 0);
 		uint8_t rook_to_col = ((m.c == K) ? 5 : 3);
-		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.to.row});
+		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.from.row});
 		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white};
-		b->b[rook_from_col][m.to.row] = no_piece;
+		b->b[rook_from_col][m.from.row] = no_piece;
 		b->hash ^= tt_pieceval(b, (coord){rook_to_col, m.to.row});
 	}
 
@@ -450,8 +454,6 @@ void apply(board *b, move m) {
 		b->hash ^= zobrist_castle_bk;
 		b->castle_bk_lost_on_ply = b->last_move_ply;
 	}
-
-	assert(b->hash == tt_hash_position(b));
 }
 
 void unapply(board *b, move m) {
@@ -472,9 +474,9 @@ void unapply(board *b, move m) {
 	if (m.c != N) { // Manually move rook
 		uint8_t rook_to_col = ((m.c == K) ? 7 : 0);
 		uint8_t rook_from_col = ((m.c == K) ? 5 : 3);
-		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.to.row});
+		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.from.row});
 		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white};
-		b->b[rook_from_col][m.to.row] = no_piece;
+		b->b[rook_from_col][m.from.row] = no_piece;
 		b->hash ^= tt_pieceval(b, (coord){rook_to_col, m.to.row});
 	}
 
@@ -499,8 +501,6 @@ void unapply(board *b, move m) {
 		b->hash ^= zobrist_castle_bk;
 		b->castle_bk_lost_on_ply = -1;
 	}
-
-	assert(b->hash == tt_hash_position(b));
 }
 
 // Invoke to prepare transposition table
@@ -508,8 +508,10 @@ void tt_init(void) {
 	if (tt_keys != NULL) free(tt_keys);
 	if (tt_values != NULL) free(tt_values);
 	tt_keys = malloc(sizeof(uint64_t) * tt_size);
+	assert(tt_keys != NULL);
 	memset(tt_keys, 0, tt_size);
 	tt_values = malloc(sizeof(evaluation) * tt_size);
+	assert(tt_values != NULL);
 	tt_count = 0;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * tt_size));
 
@@ -549,8 +551,13 @@ uint64_t tt_hash_position(board *b) {
 }
 
 void tt_put(board *b, evaluation e) {
-	assert(tt_hash_position(b) == b->hash);
-	if (tt_count >= tt_rehash_count) tt_expand();
+	//assert(tt_hash_position(b) == b->hash);
+	if (tt_count >= tt_rehash_count) {
+		if (!tt_expand()) {
+			printf("Failed to expand transposition table from %llu entries.\n", tt_count);
+			return;
+		}
+	}
 	uint64_t idx = tt_index(b);
 	if (tt_keys[idx] == 0) tt_count++;
 	tt_keys[idx] = b->hash;
@@ -564,10 +571,11 @@ evaluation *tt_get(board *b) {
 	return tt_values + idx;
 }
 
-void tt_expand(void) {
+bool tt_expand(void) {
 	uint64_t new_size = tt_size * 2;
 	uint64_t *new_keys = malloc(sizeof(uint64_t) * new_size);
 	evaluation *new_values = malloc(sizeof(uint64_t) * new_size);
+	if (new_keys == NULL || new_values == NULL) return false;
 	memset(new_keys, 0, new_size); // zero out keys
 	for (uint64_t i = 0; i < tt_size; i++) { // for every old index
 		if (tt_keys[i] == 0) continue; // skip empty slots
@@ -581,6 +589,7 @@ void tt_expand(void) {
 	tt_values = new_values;
 	tt_size = new_size;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * new_size));
+	return true;
 }
 
 // Generates pseudo-legal moves for a player.
@@ -701,9 +710,9 @@ int castle_moves(board *b, coord c, move *list) {
 	}
 	if (q_r_path_clear) {
 		if (isWhite && b->castle_rights_wq) {
-			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, K}, list + added)) added++;
+			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added)) added++;
 		} else if (!isWhite && b->castle_rights_bq) 
-			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, K}, list + added)) added++;
+			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added)) added++;
 	}
 	return added;
 }
