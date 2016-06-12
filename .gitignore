@@ -1,2 +1,6 @@
 *.out
 *.DS_STORE
+fianchetto
+*.o
+*.gch
+*.dSYM
