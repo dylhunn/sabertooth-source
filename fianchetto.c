@@ -20,13 +20,16 @@ static const coord wkr = (coord) {7, 0};
 static const coord bqr = (coord) {0, 7};
 static const coord bkr = (coord) {7, 7};
 
+static move pv[50];
+static uint64_t nodes_searched;
+
 int repl(void);
 void print_moves(board *b);
 void print_board(board *b);
-void print_analysis(board *b);
+void print_analysis(board *b, int depth);
 int search(board *b, int ply);
-int minimax_max(board *b, int ply);
-int minimax_min(board *b, int ply);
+int ab_max(board *b, int alpha, int beta, int ply);
+int ab_min(board *b, int alpha, int beta, int ply);
 int evaluate(board *b);
 int evaluate_material(board *b);
 void reset_board(board *b);
@@ -42,6 +45,8 @@ int repl(void) {
 	tt_init();
 	board b; 
 	reset_board(&b);
+	system("clear");
+	printf("Fianchetto 0.1a Console Analysis Interface\n\n");
 	while (true) {
 		print_board(&b);
 		printf("Commands: \"e3\" evaluates to depth 3; \"ma1a2\" makes the move a1a2; \"q\" quits.\n\n");
@@ -51,11 +56,14 @@ int repl(void) {
 		move m;
 		switch(buffer[0]) {
 			case 'e':
+				printf("Calculating...\n");
 				search(&b, edepth);
-				print_analysis(&b);
+				system("clear");
+				print_analysis(&b, 50); // limit analysis at 50 ply
 				printf("\n");
 				break;
 			case 'm':
+				system("clear");
 				if (!string_to_move(&b, buffer + 1, &m)) {
 					move_to_string(m, buffer);
 					printf("Invalid move: %s\n", buffer);
@@ -69,6 +77,7 @@ int repl(void) {
 			case 'q':
 				exit(0);
 			default:
+				system("clear");
 				printf("Unrecognized command.\n\n");
 		}
 	}
@@ -111,11 +120,11 @@ void print_board(board *b) {
 	printf("\n");
 }
 
-void print_analysis(board *b_orig) {
+void print_analysis(board *b_orig, int depth_limit) {
 	board b_cpy = *b_orig;
 	board *b = &b_cpy;
-	printf("%+.2f ", ((double)tt_get(b)->score)/100);
 	evaluation *eval = tt_get(b);
+	printf("%d [%+.2f] ", eval->depth, ((double)eval->score)/100); // Divide centipawn score
 	assert(eval != NULL);
 	int moveno = (b->last_move_ply+2)/2;
 	if (b->black_to_move) {
@@ -128,63 +137,91 @@ void print_analysis(board *b_orig) {
 		printf("%s ", move_to_string(eval->best, move));
 		apply(b, eval->best);
 		eval = tt_get(b);
-	} while (eval != NULL);
+	} while (eval != NULL && !m_eq(eval->best, no_move) && depth_limit-- > 0);
+	printf("(%llu new nodes searched)", nodes_searched);
 	printf("\n");
 }
 
 int search(board *b, int ply) {
-	if (b->black_to_move) return minimax_min(b, ply);
-	return minimax_max(b, ply);
+	nodes_searched = 0;
+	if (b->black_to_move) return ab_min(b, INT_MIN, INT_MAX, ply);
+	return ab_max(b, INT_MIN, INT_MAX, ply);
 }
 
-int minimax_max(board *b, int ply) {
+int ab_max(board *b, int alpha, int beta, int ply) {
+	eval *stored = tt_get(b);
+	if (stored != NULL && stored->depth >= ply) {
+		if (nstored->type == at_least) {
+
+		} else if (nstored->type == at_most) {
+
+		} else { // exact
+			
+		}
+	}
+
 	if (ply == 0) return evaluate(b);
 	int num_children;
-	move best_move;
+	move chosen_move = no_move;
 	move *moves = board_moves(b, &num_children);
 	assert(num_children > 0);
-	int score = INT_MIN;
+	int localbest = INT_MIN;
 	for (int i = 0; i < num_children; i++) {
-		#ifndef NDEBUG
-		//uint64_t oldhash = tt_hash_position(b); 
-		#endif
 		apply(b, moves[i]);
-		int child_val = minimax_min(b, ply - 1);
-		if (score < child_val) {
-			score = child_val;
-			best_move = moves[i];
+		nodes_searched++;
+		int score = ab_min(b, alpha, beta, ply - 1);
+		if (score >= beta) {
+			unapply(b, moves[i]);
+			tt_put(b, (evaluation){moves[i], score, at_least, ply});
+			free(moves);
+			return beta; // fail-hard
+		}
+		if (score > localbest) {
+			localbest = score;
+			chosen_move = moves[i];
+			if (score > alpha) alpha = score;
 		}
 		unapply(b, moves[i]);
-		//assert(tt_hash_position(b) == oldhash);
 	}
-	tt_put(b, (evaluation){best_move, score});
+	tt_put(b, (evaluation){chosen_move, alpha, exact, ply});
 	free(moves);
-	return score;
+	return alpha;
 }
 
-int minimax_min(board *b, int ply) {
+int ab_min(board *b, int alpha, int beta, int ply) {
 	if (ply == 0) return evaluate(b);
 	int num_children;
-	move best_move;
+	move chosen_move = no_move;
 	move *moves = board_moves(b, &num_children);
 	assert(num_children > 0);
-	int score = INT_MAX;
+	int localbest = INT_MAX;
 	for (int i = 0; i < num_children; i++) {
-		#ifndef NDEBUG
-		//uint64_t oldhash = tt_hash_position(b); // debugging
-		#endif
 		apply(b, moves[i]);
-		int child_val = minimax_max(b, ply - 1);
-		if (score > child_val) {
-			score = child_val;
-			best_move = moves[i];
+		nodes_searched++;
+		int score = ab_max(b, alpha, beta, ply - 1);
+		if (score <= alpha) {
+			unapply(b, moves[i]);
+			tt_put(b, (evaluation){moves[i], score, at_most, ply});
+			free(moves);
+			return alpha; // fail-hard
+		}
+		if (score < localbest) {
+			localbest = score;
+			chosen_move = moves[i];
+			if (score < beta) beta = score;
 		}
 		unapply(b, moves[i]);
-		//assert(tt_hash_position(b) == oldhash);
 	}
-	tt_put(b, (evaluation){best_move, score});
+	tt_put(b, (evaluation){chosen_move, beta, exact, ply});
 	free(moves);
-	return score;
+	return beta;
+}
+
+int ab_mem(board *b, bool maximizing, int alpha, int beta, int depth) {
+	//eval *stored = tt_get(b);
+	//if (eval != NULL) {
+
+	//}
 }
 
 // Statically evaluates a board position.
@@ -208,7 +245,7 @@ int evaluate_material(board *b) {
 				case 'B': piece_val = 330; break;
 				case 'R': piece_val = 500; break;
 				case 'Q': piece_val = 900; break;
-				case 'K': piece_val = 20000; break;
+				case 'K': piece_val = 60000; break;
 				default: assert(false);
 			}
 			if (!b->b[i][j].white) piece_val = -piece_val;
@@ -337,7 +374,7 @@ void unapply(board *b, move m) {
 		uint8_t rook_to_col = ((m.c == K) ? 7 : 0);
 		uint8_t rook_from_col = ((m.c == K) ? 5 : 3);
 		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.from.row});
-		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white};
+		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.from).white};
 		b->b[rook_from_col][m.from.row] = no_piece;
 		b->hash ^= tt_pieceval(b, (coord){rook_to_col, m.to.row});
 	}

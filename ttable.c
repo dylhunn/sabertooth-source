@@ -73,17 +73,37 @@ uint64_t tt_hash_position(board *b) {
 	return hash;
 }
 
+// TODO - permit storing both upper and lower bounds in an inexact node
 void tt_put(board *b, evaluation e) {
 	//assert(tt_hash_position(b) == b->hash);
 	if (tt_count >= tt_rehash_count) {
 		if (!tt_expand()) {
-			printf("Failed to expand transposition table from %llu entries.\n", tt_count);
+			printf("ERROR: Failed to expand transposition table from %llu entries.\n", tt_count);
 			return;
 		}
 	}
-	uint64_t idx = tt_index(b);
+
+	uint64_t idx = b->hash % tt_size;
+	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
+		if (b->last_move_ply - tt_values[idx].last_access_move >= remove_at_age) {
+			tt_count--;
+			tt_keys[idx] = 0;
+			break;
+		}
+		idx = (idx + 1) % tt_size;
+	}
+
 	if (tt_keys[idx] == 0) tt_count++;
+	// Never replace exact with inexact, or we could easily lose the PV.
+	if (tt_values[idx].type == exact && e.type != exact) return;
+	// Always replace inexact with exact;
+	// otherwise, we might fail to replace a cutoff with a "shallow" ending of a PV.
+	if (tt_values[idx].type != exact && e.type == exact) goto skipchecks;
+	// Otherwise, prefer deeper entries
+	if (e.depth < tt_values[idx].depth) return;
+	skipchecks:
 	tt_keys[idx] = b->hash;
+	e.last_access_move = b->last_move_ply;
 	tt_values[idx] = e;
 }
 
@@ -91,10 +111,12 @@ void tt_put(board *b, evaluation e) {
 evaluation *tt_get(board *b) {
 	uint64_t idx = tt_index(b);
 	if (tt_keys[idx] == 0) return NULL;
+	tt_values[idx].last_access_move = b->last_move_ply;
 	return tt_values + idx;
 }
 
 bool tt_expand(void) {
+	printf("Expanding transposition table...\n");
 	uint64_t new_size = tt_size * 2;
 	uint64_t *new_keys = malloc(sizeof(uint64_t) * new_size);
 	evaluation *new_values = malloc(sizeof(uint64_t) * new_size);

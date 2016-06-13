@@ -49,9 +49,18 @@ typedef struct board {
 	int last_move_ply; // the ply number of the last move applied
 } board;
 
+typedef enum evaltype {
+	at_least,
+	at_most,
+	exact
+} evaltype;
+
 typedef struct evaluation {
 	move best;
 	int score;
+	evaltype type;
+	uint8_t depth;
+	uint16_t last_access_move; // used for age to delete ancient entries; set automatically by the TT
 } evaluation;
 
 #endif
