@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/time.h>
 #include "types.h"
 #include "util.h"
 #include "movegen.h"
@@ -20,13 +21,20 @@ static const coord wkr = (coord) {7, 0};
 static const coord bqr = (coord) {0, 7};
 static const coord bkr = (coord) {7, 7};
 
+// limit for how many moves print_analysis should print
+static const int depth_limit = 50;
+
 static move pv[50];
+
+// set by last call to search()
 static uint64_t nodes_searched;
+static double search_millisec;
 
 int repl(void);
 void print_moves(board *b);
 void print_board(board *b);
-void print_analysis(board *b, int depth);
+void print_analysis(board *b);
+void iterative_deepen(board *b, int max_depth);
 int search(board *b, int ply);
 int ab_max(board *b, int alpha, int beta, int ply);
 int ab_min(board *b, int alpha, int beta, int ply);
@@ -57,9 +65,8 @@ int repl(void) {
 		switch(buffer[0]) {
 			case 'e':
 				printf("Calculating...\n");
-				search(&b, edepth);
 				system("clear");
-				print_analysis(&b, 50); // limit analysis at 50 ply
+				iterative_deepen(&b, edepth);
 				printf("\n");
 				break;
 			case 'm':
@@ -120,11 +127,12 @@ void print_board(board *b) {
 	printf("\n");
 }
 
-void print_analysis(board *b_orig, int depth_limit) {
+void print_analysis(board *b_orig) {
+	int curr_depth = depth_limit;
 	board b_cpy = *b_orig;
 	board *b = &b_cpy;
 	evaluation *eval = tt_get(b);
-	printf("%d [%+.2f] ", eval->depth, ((double)eval->score)/100); // Divide centipawn score
+	printf("d%d [%+.2f]: ", eval->depth, ((double)eval->score)/100); // Divide centipawn score
 	assert(eval != NULL);
 	int moveno = (b->last_move_ply+2)/2;
 	if (b->black_to_move) {
@@ -137,23 +145,42 @@ void print_analysis(board *b_orig, int depth_limit) {
 		printf("%s ", move_to_string(eval->best, move));
 		apply(b, eval->best);
 		eval = tt_get(b);
-	} while (eval != NULL && !m_eq(eval->best, no_move) && depth_limit-- > 0);
-	printf("(%llu new nodes searched)", nodes_searched);
+	} while (eval != NULL && !m_eq(eval->best, no_move) && curr_depth-- > 0);
+	printf("(%llu new nodes in %.0fms)", nodes_searched, search_millisec);
 	printf("\n");
 }
 
+void iterative_deepen(board *b, int max_depth) {
+	printf("Iterative Deepening Analysis Results (including cached analysis)\n");
+	for (int i = 1; i <= max_depth; i++) {
+		search(b, i);
+		printf("Searching at depth %d... ", i);
+		print_analysis(b);
+	}
+}
+
 int search(board *b, int ply) {
+	struct timeval t1, t2;
+    // start timer
+    gettimeofday(&t1, NULL);
 	nodes_searched = 0;
-	if (b->black_to_move) return ab_min(b, INT_MIN, INT_MAX, ply);
-	return ab_max(b, INT_MIN, INT_MAX, ply);
+	int result;
+	if (b->black_to_move) result = ab_min(b, INT_MIN, INT_MAX, ply);
+	else result = ab_max(b, INT_MIN, INT_MAX, ply);
+	gettimeofday(&t2, NULL);
+    // compute and print the elapsed time in millisec
+    search_millisec = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+    search_millisec += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+    return result;
+
 }
 
 int ab_max(board *b, int alpha, int beta, int ply) {
-	eval *stored = tt_get(b);
+	evaluation *stored = tt_get(b);
 	if (stored != NULL && stored->depth >= ply) {
-		if (nstored->type == at_least) {
+		if (stored->type == at_least) {
 
-		} else if (nstored->type == at_most) {
+		} else if (stored->type == at_most) {
 
 		} else { // exact
 			
