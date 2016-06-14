@@ -2,6 +2,7 @@
 
 const piece no_piece = NO_PIECE;
 const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE, N};
+uint16_t true_game_ply_clock = 0;
 
 bool p_eq(piece a, piece b) {
 	return a.type == b.type && a.white == b.white;

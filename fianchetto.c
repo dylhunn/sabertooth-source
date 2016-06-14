@@ -2,6 +2,8 @@
  * - Store sets of pieces by color for use in:
  *   - board_moves
  *   - evaluate_material
+ * - Update TT to provide alpha and beta for non-exact nodes
+ * - MTD(f)
  */
 
 #include <assert.h>
@@ -51,6 +53,7 @@ int main() {
 
 int repl(void) {
 	tt_init();
+	true_game_ply_clock = 0;
 	board b; 
 	reset_board(&b);
 	system("clear");
@@ -77,6 +80,7 @@ int repl(void) {
 
 				} else {
 					printf("Read move: %s\n", move_to_string(m, buffer));
+					true_game_ply_clock++;
 					apply(&b, m);
 				}
 				printf("\n");
@@ -153,8 +157,9 @@ void print_analysis(board *b_orig) {
 void iterative_deepen(board *b, int max_depth) {
 	printf("Iterative Deepening Analysis Results (including cached analysis)\n");
 	for (int i = 1; i <= max_depth; i++) {
-		search(b, i);
 		printf("Searching at depth %d... ", i);
+		fflush(stdout);
+		search(b, i);
 		print_analysis(b);
 	}
 }
@@ -179,21 +184,31 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 	evaluation *stored = tt_get(b);
 	if (stored != NULL && stored->depth >= ply) {
 		if (stored->type == at_least) {
-
+			if (stored->score >= beta) return beta;
 		} else if (stored->type == at_most) {
-
+			//if (stored->score <= alpha) return alpha;
 		} else { // exact
-			
+			if (stored->score >= beta) return beta; // respect fail-hard cutoff
+			if (stored->score < alpha) return alpha; // alpha cutoff
+			return stored->score;
 		}
-	}
+	}	
 
 	if (ply == 0) return evaluate(b);
 	int num_children;
 	move chosen_move = no_move;
 	move *moves = board_moves(b, &num_children);
 	assert(num_children > 0);
+
+	// start with the move from the transposition table
+	if (stored != NULL) {
+		assert(!m_eq(stored->best, no_move));
+		moves[num_children] = stored->best;
+		num_children++;
+	}
+
 	int localbest = INT_MIN;
-	for (int i = 0; i < num_children; i++) {
+	for (int i = num_children - 1; i >= 0; i--) {
 		apply(b, moves[i]);
 		nodes_searched++;
 		int score = ab_min(b, alpha, beta, ply - 1);
@@ -216,13 +231,34 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 }
 
 int ab_min(board *b, int alpha, int beta, int ply) {
+	evaluation *stored = tt_get(b);
+	if (stored != NULL && stored->depth >= ply) {
+		if (stored->type == at_least) {
+			//if (stored->score >= beta) return beta;
+		} else if (stored->type == at_most) {
+			if (stored->score <= alpha) return alpha;
+		} else { // exact
+			if (stored->score <= alpha) return alpha; // respect fail-hard cutoff
+			if (stored->score > beta) return beta; // alpha cutoff
+			return stored->score;
+		}
+	}
+
 	if (ply == 0) return evaluate(b);
 	int num_children;
 	move chosen_move = no_move;
 	move *moves = board_moves(b, &num_children);
 	assert(num_children > 0);
+
+	// start with the move from the transposition table
+	if (stored != NULL) {
+		assert(!m_eq(stored->best, no_move));
+		moves[num_children] = stored->best;
+		num_children++;
+	}
+
 	int localbest = INT_MAX;
-	for (int i = 0; i < num_children; i++) {
+	for (int i = num_children - 1; i >= 0; i--) {
 		apply(b, moves[i]);
 		nodes_searched++;
 		int score = ab_max(b, alpha, beta, ply - 1);
@@ -242,13 +278,6 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 	tt_put(b, (evaluation){chosen_move, beta, exact, ply});
 	free(moves);
 	return beta;
-}
-
-int ab_mem(board *b, bool maximizing, int alpha, int beta, int depth) {
-	//eval *stored = tt_get(b);
-	//if (eval != NULL) {
-
-	//}
 }
 
 // Statically evaluates a board position.
@@ -327,7 +356,7 @@ void apply(board *b, move m) {
 	// Manually move rook for castling
 	if (m.c != N) { // Manually move rook
 		uint8_t rook_from_col = ((m.c == K) ? 7 : 0);
-		uint8_t rook_to_col = ((m.c == K) ? 5 : 3);
+		uint8_t rook_to_col = ((m.c == K) ? 5 : 2);
 		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.from.row});
 		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white};
 		b->b[rook_from_col][m.from.row] = no_piece;
@@ -399,7 +428,7 @@ void unapply(board *b, move m) {
 	// Manually move rook for castling
 	if (m.c != N) { // Manually move rook
 		uint8_t rook_to_col = ((m.c == K) ? 7 : 0);
-		uint8_t rook_from_col = ((m.c == K) ? 5 : 3);
+		uint8_t rook_from_col = ((m.c == K) ? 5 : 2);
 		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.from.row});
 		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.from).white};
 		b->b[rook_from_col][m.from.row] = no_piece;

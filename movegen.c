@@ -25,7 +25,7 @@ move *board_moves(board *b, int *count) {
 		}
 
 	}
-	moves = realloc(moves, sizeof(move) * (*count));
+	moves = realloc(moves, sizeof(move) * ((*count) + 1)); // extra slot for working space
 	return moves;
 }
 
@@ -129,9 +129,9 @@ int castle_moves(board *b, coord c, move *list) {
 	}
 	if (q_r_path_clear) {
 		if (isWhite && b->castle_rights_wq) {
-			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added)) added++;
+			if (add_move(b, (move){c, (coord){1, row}, no_piece, no_piece, Q}, list + added)) added++;
 		} else if (!isWhite && b->castle_rights_bq) 
-			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added)) added++;
+			if (add_move(b, (move){c, (coord){1, row}, no_piece, no_piece, Q}, list + added)) added++;
 	}
 	return added;
 }

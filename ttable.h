@@ -46,7 +46,8 @@ uint64_t tt_pieceval(board *b, coord c);
 // Re-hash at 70% load factor
 static const double tt_max_load = .7;
 
-static const int remove_at_age = 5;
+// Nodes that haven't been accessed in this many moves are ancient and might be removed
+static const int remove_at_age = 4;
 
 // Randomly selected zobrist values used to hash board state
 extern uint64_t zobrist[64][12]; // zobrist table for pieces

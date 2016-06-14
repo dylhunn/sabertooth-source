@@ -85,7 +85,7 @@ void tt_put(board *b, evaluation e) {
 
 	uint64_t idx = b->hash % tt_size;
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
-		if (b->last_move_ply - tt_values[idx].last_access_move >= remove_at_age) {
+		if (true_game_ply_clock - tt_values[idx].last_access_move >= remove_at_age) {
 			tt_count--;
 			tt_keys[idx] = 0;
 			break;
@@ -103,7 +103,7 @@ void tt_put(board *b, evaluation e) {
 	if (e.depth < tt_values[idx].depth) return;
 	skipchecks:
 	tt_keys[idx] = b->hash;
-	e.last_access_move = b->last_move_ply;
+	e.last_access_move = true_game_ply_clock;
 	tt_values[idx] = e;
 }
 
@@ -111,7 +111,7 @@ void tt_put(board *b, evaluation e) {
 evaluation *tt_get(board *b) {
 	uint64_t idx = tt_index(b);
 	if (tt_keys[idx] == 0) return NULL;
-	tt_values[idx].last_access_move = b->last_move_ply;
+	tt_values[idx].last_access_move = true_game_ply_clock;
 	return tt_values + idx;
 }
 

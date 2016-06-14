@@ -15,6 +15,7 @@
 
 extern const piece no_piece;
 extern const move no_move;
+extern uint16_t true_game_ply_clock;
 
 bool p_eq(piece a, piece b);
 

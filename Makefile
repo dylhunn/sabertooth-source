@@ -1,10 +1,10 @@
-CFLAGS = -O0 -Weverything -Wno-padded -Wno-unused-parameter -Wno-unused-variable -Wno-sign-conversion -ggdb
+CFLAGS = -O3 -Weverything -Wno-padded -Wno-unused-parameter -Wno-unused-variable -Wno-sign-conversion -ggdb
 all: fianchetto.o util.o ttable.o movegen.o
 	clang $(CFLAGS) $^ -o fianchetto
 clean:
-	rm fianchetto
-	rm *.o
-	rm *.gch
+	rm -f fianchetto
+	rm -f *.o
+	rm -f *.gch
 	rm -rf fianchetto.dSYM
 %.o: %.c
 	clang -c $(CFLAGS) $< -o $@

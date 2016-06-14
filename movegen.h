@@ -19,6 +19,8 @@
 // Generates pseudo-legal moves for a player.
 // (Does not exclude moves that put the king in check.)
 // Generates an array of valid moves, and populates the count.
+// (The malloc'ed memory will have a blank slot at the end for ease of move ordering,
+// but this is not reflected in the count.)
 move *board_moves(board *b, int *count);
 
 // Fill a provided buffer with a move's string.
