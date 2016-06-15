@@ -52,6 +52,8 @@ void print_board_d(board *b) {
 	printf("\n");
 }
 
+void ttt() {2+2;};
+
 int ab_max(board *b, int alpha, int beta, int ply) {
 	evaluation *stored = tt_get(b);
 	if (stored != NULL && stored->depth >= ply) {
@@ -90,11 +92,17 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 
 	int localbest = INT_MIN;
 	for (int i = num_children - 1; i >= 0; i--) {
+
+		uint64_t old_hash = b->hash; // for debugging
+
+				board storedb = *b;
+
 		apply(b, moves[i]);
 		sstats.nodes_searched++;
 		int score = ab_min(b, alpha, beta, ply - 1);
 		if (score >= beta) {
 			unapply(b, moves[i]);
+			assert (old_hash == b->hash);
 			tt_put(b, (evaluation){moves[i], score, at_least, ply});
 			free(moves);
 			return beta; // fail-hard
@@ -105,6 +113,8 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 			if (score > alpha) alpha = score;
 		}
 		unapply(b, moves[i]);
+		if (old_hash != b->hash) ttt();
+		assert (old_hash == b->hash);
 	}
 	tt_put(b, (evaluation){chosen_move, alpha, exact, ply});
 	free(moves);
@@ -149,11 +159,16 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 
 	int localbest = INT_MAX;
 	for (int i = num_children - 1; i >= 0; i--) {
+
+		uint64_t old_hash = b->hash; // for debugging
+		board storedb = *b;
+
 		apply(b, moves[i]);
 		sstats.nodes_searched++;
 		int score = ab_max(b, alpha, beta, ply - 1);
 		if (score <= alpha) {
 			unapply(b, moves[i]);
+			assert (old_hash == b->hash);
 			tt_put(b, (evaluation){moves[i], score, at_most, ply});
 			free(moves);
 			return alpha; // fail-hard
@@ -164,6 +179,7 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 			if (score < beta) beta = score;
 		}
 		unapply(b, moves[i]);
+		assert (old_hash == b->hash);
 	}
 	tt_put(b, (evaluation){chosen_move, beta, exact, ply});
 	free(moves);
@@ -221,22 +237,22 @@ void apply(board *b, move m) {
 	}
 
 	// Moves involving rook squares always strip castling rights
-	if (c_eq(m.from, wqr) && b->castle_rights_wq) {
+	if ((c_eq(m.from, wqr) || c_eq(m.to, wqr)) && b->castle_rights_wq) {
 		b->castle_rights_wq = false;
 		b->hash ^= zobrist_castle_wq;
 		b->castle_wq_lost_on_ply = b->last_move_ply;
 	}
-	if (c_eq(m.from, wkr) && b->castle_rights_wk) {
+	if ((c_eq(m.from, wkr) || c_eq(m.to, wkr)) && b->castle_rights_wk) {
 		b->castle_rights_wk = false;
 		b->hash ^= zobrist_castle_wk;
 		b->castle_wk_lost_on_ply = b->last_move_ply;
 	}
-	if (c_eq(m.from, bqr) && b->castle_rights_bq) {
+	if ((c_eq(m.from, bqr) || c_eq(m.to, bqr)) && b->castle_rights_bq) {
 		b->castle_rights_bq = false;
 		b->hash ^= zobrist_castle_bq;
 		b->castle_bq_lost_on_ply = b->last_move_ply;
 	}
-	if (c_eq(m.from, bkr) && b->castle_rights_bk) {
+	if ((c_eq(m.from, bkr) || c_eq(m.to, bkr)) && b->castle_rights_bk) {
 		b->castle_rights_bk = false;
 		b->hash ^= zobrist_castle_bk;
 		b->castle_bk_lost_on_ply = b->last_move_ply;
