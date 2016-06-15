@@ -13,7 +13,7 @@ uint64_t zobrist_black_to_move;
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
 static uint64_t tt_size = TT_STARTING_SIZE;
-static uint64_t tt_count;
+static uint64_t tt_count = 0;
 static uint64_t tt_rehash_count; // computed based on max_load
 
 static inline int square_code(coord c) {
@@ -32,7 +32,7 @@ void tt_init(void) {
 	if (tt_values != NULL) free(tt_values);
 	tt_keys = malloc(sizeof(uint64_t) * tt_size);
 	assert(tt_keys != NULL);
-	memset(tt_keys, 0, tt_size);
+	memset(tt_keys, 0, tt_size * sizeof(uint64_t));
 	tt_values = malloc(sizeof(evaluation) * tt_size);
 	assert(tt_values != NULL);
 	tt_count = 0;
@@ -50,15 +50,19 @@ void tt_init(void) {
 	zobrist_castle_bk = rand64();
 	zobrist_black_to_move = rand64();
 	atexit(tt_auto_cleanup);
+	is_initialized = true;
 }
 
 // Automatically called
 void tt_auto_cleanup(void) {
-	free(tt_keys);
-	free(tt_values);
+	if (tt_keys) free(tt_keys);
+	tt_keys = NULL;
+	if (tt_values) free(tt_values);
+	tt_values = NULL;
 }
 
 uint64_t tt_hash_position(board *b) {
+	assert(is_initialized);
 	uint64_t hash = 0;
 	for (uint8_t i = 0; i < 8; i++) {
 		for (uint8_t j = 0; j < 8; j++) {
@@ -75,6 +79,16 @@ uint64_t tt_hash_position(board *b) {
 
 // TODO - permit storing both upper and lower bounds in an inexact node
 void tt_put(board *b, evaluation e) {
+
+	// debug
+	/*move watchfor = {{2, 5}, {3, 3}, {'K', true}, no_piece, N};
+	if (m_eq(e.best, watchfor)) {
+		printf("Alert!\n");
+		hhh();
+	}*/
+
+
+	assert(is_initialized);
 	//assert(tt_hash_position(b) == b->hash);
 	if (tt_count >= tt_rehash_count) {
 		if (!tt_expand()) {
@@ -85,7 +99,7 @@ void tt_put(board *b, evaluation e) {
 
 	uint64_t idx = b->hash % tt_size;
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
-		if (true_game_ply_clock - tt_values[idx].last_access_move >= remove_at_age) {
+		if (b->true_game_ply_clock - tt_values[idx].last_access_move >= remove_at_age) {
 			tt_count--;
 			tt_keys[idx] = 0;
 			break;
@@ -103,25 +117,33 @@ void tt_put(board *b, evaluation e) {
 	if (e.depth < tt_values[idx].depth) return;
 	skipchecks:
 	tt_keys[idx] = b->hash;
-	e.last_access_move = true_game_ply_clock;
+	e.last_access_move = b->true_game_ply_clock;
 	tt_values[idx] = e;
 }
 
 // Returns NULL if entry is not found.
 evaluation *tt_get(board *b) {
+	assert(is_initialized);
 	uint64_t idx = tt_index(b);
 	if (tt_keys[idx] == 0) return NULL;
-	tt_values[idx].last_access_move = true_game_ply_clock;
+	tt_values[idx].last_access_move = b->true_game_ply_clock;
 	return tt_values + idx;
 }
 
+// Clear the transposition table (by resetting it).
+void tt_clear() {
+	assert(is_initialized);
+	tt_init();
+}
+
 bool tt_expand(void) {
+	assert(is_initialized);
 	printf("Expanding transposition table...\n");
 	uint64_t new_size = tt_size * 2;
 	uint64_t *new_keys = malloc(sizeof(uint64_t) * new_size);
 	evaluation *new_values = malloc(sizeof(uint64_t) * new_size);
 	if (new_keys == NULL || new_values == NULL) return false;
-	memset(new_keys, 0, new_size); // zero out keys
+	memset(new_keys, 0, new_size * sizeof(uint64_t)); // zero out keys
 	for (uint64_t i = 0; i < tt_size; i++) { // for every old index
 		if (tt_keys[i] == 0) continue; // skip empty slots
 		uint64_t new_idx = tt_keys[i] % new_size;
@@ -138,14 +160,17 @@ bool tt_expand(void) {
 }
 
 uint64_t tt_pieceval(board *b, coord c) {
+	assert(is_initialized);
 	int piece_code = 0;
 	piece p = at(b, c);
 	if (p_eq(p, no_piece)) return 0;
 	if (!p.white) piece_code += 6;
-	if (p.type == 'N') piece_code += 1;
+	if (p.type == 'P') ; // do nothing
+	else if (p.type == 'N') piece_code += 1;
 	else if (p.type == 'B') piece_code += 2;
 	else if (p.type == 'R') piece_code += 3;
 	else if (p.type == 'Q') piece_code += 4;
-	else piece_code += 5;
+	else if (p.type == 'K') piece_code += 5;
+	else assert(false);
 	return zobrist[square_code(c)][piece_code];
 }

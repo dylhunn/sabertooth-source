@@ -33,6 +33,9 @@ void tt_put(board *b, evaluation e);
 // performing another tt_put(), and using it then has undefined behavior.
 evaluation *tt_get(board *b);
 
+// Clears the transposition table (by resetting it).
+void tt_clear(void);
+
 // Get the Zobrist hash value of a piece.
 uint64_t tt_pieceval(board *b, coord c);
 
@@ -48,6 +51,8 @@ static const double tt_max_load = .7;
 
 // Nodes that haven't been accessed in this many moves are ancient and might be removed
 static const int remove_at_age = 4;
+
+static bool is_initialized = false;
 
 // Randomly selected zobrist values used to hash board state
 extern uint64_t zobrist[64][12]; // zobrist table for pieces

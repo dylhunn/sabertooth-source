@@ -23,10 +23,13 @@
 // but this is not reflected in the count.)
 move *board_moves(board *b, int *count);
 
+bool is_legal_move(board *b, move m);
+
 // Fill a provided buffer with a move's string.
 char *move_to_string(move m, char str[6]);
 
 // Parses a string into a move object; returns success.
+// (Ensures the move is valid on the board.)
 bool string_to_move(board *b, char *str, move *m);
 
 // Determines if a specific square is under attack.

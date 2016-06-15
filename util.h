@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "stdbool.h"
 #include "types.h"
+#include "ttable.h"
 
 #define NO_COORD {255, 255}
 #define NO_PIECE {'0', false}
@@ -15,7 +16,9 @@
 
 extern const piece no_piece;
 extern const move no_move;
-extern uint16_t true_game_ply_clock;
+
+extern const char *engine_name;
+extern const char *engine_version;
 
 bool p_eq(piece a, piece b);
 
@@ -30,6 +33,10 @@ piece at(board *b, coord c);
 void set(board *b, coord c, piece p);
 
 extern uint64_t rand64(void);
+
+void reset_board(board *b);
+
+bool move_arr_contains(move *moves, move move, int arrlen);
 
 #endif
 

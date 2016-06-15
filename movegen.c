@@ -29,6 +29,13 @@ move *board_moves(board *b, int *count) {
 	return moves;
 }
 
+bool is_legal_move(board *b, move m) {
+	move moves[50]; // Up to 50 moves supported
+	int count = piece_moves(b, m.from, moves);
+	bool result = move_arr_contains(moves, m, count);
+	return result;
+}
+
 // Writes all legal moves for a piece to an array starting at index 0; 
 // returns the number of items added.
 int piece_moves(board *b, coord c, move *list) {

@@ -47,6 +47,10 @@ typedef struct board {
 	int castle_bq_lost_on_ply;
 	int castle_bk_lost_on_ply;
 	int last_move_ply; // the ply number of the last move applied
+
+	// the true ply number of the game, which has no bearing on the current board state
+	// used only for disposing of ancient entries in the transposition table
+	int true_game_ply_clock; 
 } board;
 
 typedef enum evaltype {
@@ -62,5 +66,11 @@ typedef struct evaluation {
 	uint8_t depth;
 	uint16_t last_access_move; // used for age to delete ancient entries; set automatically by the TT
 } evaluation;
+
+typedef struct searchstats {
+	int depth; // the depth of the current search
+	double time; // time at this depth in ms
+	uint64_t nodes_searched;
+} searchstats;
 
 #endif
