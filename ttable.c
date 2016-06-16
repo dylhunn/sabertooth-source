@@ -106,7 +106,7 @@ void tt_put(board *b, evaluation e) {
 	// Always replace inexact with exact;
 	// otherwise, we might fail to replace a cutoff with a "shallow" ending of a PV.
 	if (tt_values[idx].type != exact && e.type == exact) goto skipchecks;
-	// Otherwise, prefer deeper entries
+	// Otherwise, prefer deeper entries; replace if equally deep due to aspiration windows
 	if (e.depth < tt_values[idx].depth) return;
 	skipchecks:
 	tt_keys[idx] = b->hash;

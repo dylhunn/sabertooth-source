@@ -45,7 +45,7 @@ int repl(void) {
 	board b; 
 	reset_board(&b);
 	system("clear");
-	printf("%s %s Console Analysis Interface\n\n", engine_name, engine_version);
+	printf("%s %s by Dylan D. Hunn\nConsole Analysis Interface\n\n", engine_name, engine_version);
 	while (true) {
 		print_board(&b);
 		printf("Commands: \"e3\" evaluates to depth 3; \"ma1a2\" makes the move a1a2; \"q\" quits; \"u\" or \"uci\" enters UCI mode.\n\n");

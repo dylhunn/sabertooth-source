@@ -5,6 +5,7 @@ searchstats sstats;
 
 int mtd_f(board *b, int ply);
 int quiesce(board *b, int alpha, int beta, int ply);
+int capture_move_comparator(board *board, move *a, move *b);
 
 int clear_stats() {
 	sstats.time = 0;
@@ -21,9 +22,9 @@ int search(board *b, int ply) {
     // start timer
     gettimeofday(&t1, NULL);
 	int result;
-	if (b->black_to_move) result = ab_min(b, NEG_INFINITY, POS_INFINITY, ply);
-	else result = ab_max(b, NEG_INFINITY, POS_INFINITY, ply);
-	//mtd_f(b, ply);
+	//if (b->black_to_move) result = ab_min(b, NEG_INFINITY, POS_INFINITY, ply);
+	//else result = ab_max(b, NEG_INFINITY, POS_INFINITY, ply);
+	result = mtd_f(b, ply);
 
 	gettimeofday(&t2, NULL);
     // compute and print the elapsed time in millisec
@@ -31,7 +32,6 @@ int search(board *b, int ply) {
     search_millisec += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
     sstats.time = search_millisec;
     return result;
-
 }
 
 int mtd_f(board *board, int ply) {
@@ -50,31 +50,6 @@ int mtd_f(board *board, int ply) {
 		else lower_bound = g;
 	}
 	return g;
-}
-
-// DUPLICATE, DO NOT EDIT
-void print_board_d(board *b) {
-	for (int i = 7; i >= 0; i--) {
-		printf(cBLU "%d " cRESET, i+1);
-		for (int j = 0; j <= 7; j++) {
-			if (p_eq(b->b[j][i], no_piece)) printf(" ");
-			else {
-				if (b->b[j][i].white) printf(cWHT "%c" cRESET, b->b[j][i].type);
-				else printf(cYEL "%c" cRESET, b->b[j][i].type);
-			}
-		}
-		printf("\n");
-	}
-	printf(cBLU "  ABCDEFGH\n" cRESET);
-	printf("Castling rights: ");
-	if (b->castle_rights_wq) printf("white queenside; ");
-	if (b->castle_rights_wk) printf("white kingside; ");
-	if (b->castle_rights_bq) printf("black queenside; ");
-	if (b->castle_rights_bk) printf("black kingside; ");
-
-	printf("\n%s to move.\n\n", b->black_to_move ? "Black" : "White");
-	print_moves(b);
-	printf("\n");
 }
 
 int ab_max(board *b, int alpha, int beta, int ply) {
@@ -111,8 +86,6 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 		} else {
 			char buffer[6];
 			printf("Erroneous move in TT: %s\n", move_to_string(stored->best, buffer));
-			printf("Board state at time of error: \n");
-			print_board_d(b);
 		}
 	}
 
@@ -176,7 +149,6 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 			char buffer[6];
 			printf("Erroneous move in TT: %s\n", move_to_string(stored->best, buffer));
 			printf("Board state at time of error: \n");
-			print_board_d(b);
 		}
 	}
 
@@ -210,7 +182,6 @@ int quiesce(board *b, int alpha, int beta, int ply) {
 
 	int stand_pat = evaluate(b);
 	if (b->black_to_move) stand_pat = -stand_pat;
-	//return stand_pat;
 	if (stand_pat >= beta) return beta;
 	if (alpha < stand_pat) alpha = stand_pat;
 	if (ply < -quiesce_ply_cutoff) {
@@ -220,16 +191,74 @@ int quiesce(board *b, int alpha, int beta, int ply) {
 
 	int num_children = 0;
 	move *moves = board_moves(b, &num_children);
+
+	// Sort exchanges using MVV-LVA
+	qsort_r(moves, num_children, sizeof(move), b, capture_move_comparator);
 	for (int i = 0; i < num_children; i++) {
 		if (p_eq(moves[i].captured, no_piece)) continue;
 		apply(b, moves[i]);
 		int child_score = quiesce(b, -beta, -alpha, ply-1);
 		unapply(b, moves[i]);
-		if (child_score >= beta) return beta;
+		if (child_score >= beta) {
+			free(moves);
+			return beta;
+		}
 		if (child_score > alpha) alpha = child_score;
 	}
+	free(moves);
 	return alpha;
 }
+
+// An array sorting comparator for capture moves, for use with qsort_r.
+// Sorts by MVV/LVA (Most Valuable Victim/Least Valuable Attacker).
+// Returns -1 if the first argument should come first, etc.
+// COMPATIBILITY WARNING: When compiling with GNU libraries (Linux), the argument order
+// is silently permuted! This uses the BSD/OS X ordering.
+int capture_move_comparator(board *board, move *a, move *b) {
+	int a_victim_value;
+	switch(a->captured.type) {
+		case 'P': a_victim_value = 1; break;
+		case 'N': a_victim_value = 3; break;
+		case 'B': a_victim_value = 3; break;
+		case 'R': a_victim_value = 5; break;
+		case 'Q': a_victim_value = 9; break;
+		case 'K': a_victim_value = 2000; break;
+		case '0': a_victim_value = 0; break; // In case we attack an empty square (no_piece)
+		default: assert(false);
+	}
+	int b_victim_value;
+	switch(b->captured.type) {
+		case 'P': b_victim_value = 1; break;
+		case 'N': b_victim_value = 3; break;
+		case 'B': b_victim_value = 3; break;
+		case 'R': b_victim_value = 5; break;
+		case 'Q': b_victim_value = 9; break;
+		case 'K': b_victim_value = 200; break;
+		case '0': b_victim_value = 0; break; // In case we attack an empty square (no_piece)
+		default: assert(false);
+	}
+	int a_attacker_value;
+	switch(at(board, a->from).type) {
+		case 'P': a_attacker_value = 1; break;
+		case 'N': a_attacker_value = 3; break;
+		case 'B': a_attacker_value = 3; break;
+		case 'R': a_attacker_value = 5; break;
+		case 'Q': a_attacker_value = 9; break;
+		case 'K': a_attacker_value = 20; break;
+		default: assert(false);
+	}
+	int b_attacker_value;
+	switch(at(board, b->from).type) {
+		case 'P': b_attacker_value = 1; break;
+		case 'N': b_attacker_value = 3; break;
+		case 'B': b_attacker_value = 3; break;
+		case 'R': b_attacker_value = 5; break;
+		case 'Q': b_attacker_value = 9; break;
+		case 'K': b_attacker_value = 20; break;
+		default: assert(false);
+	}
+	return ((b_victim_value << 2) - b_attacker_value) - ((a_victim_value << 2) - a_attacker_value);
+} 
 
 void apply(board *b, move m) {
 	// Information

@@ -41,27 +41,34 @@ bool is_legal_move(board *b, move m) {
 int piece_moves(board *b, coord c, move *list) {
 	int added = 0;
 	if (p_eq(at(b, c), no_piece)) return 0;
-	if (at(b, c).type == 'P') {
-		added += pawn_moves(b, c, list);
-	} else if (at(b, c).type == 'B') {
-		added += diagonal_moves(b, c, list, 8);
-	} else if (at(b, c).type == 'N') {
-		for (int i = -2; i <= 2; i += 4) {
-			for (int j = -1; j <= 1; j += 2) {
-				added += slide_moves(b, c, list + added, i, j, 1);
-				added += slide_moves(b, c, list + added, j, i, 1);
+	switch(at(b, c).type) {
+		case 'P':
+			added += pawn_moves(b, c, list);
+		break;
+		case 'N':
+			for (int i = -2; i <= 2; i += 4) {
+				for (int j = -1; j <= 1; j += 2) {
+					added += slide_moves(b, c, list + added, i, j, 1);
+					added += slide_moves(b, c, list + added, j, i, 1);
+				}
 			}
-		}
-	} else if (at(b, c).type == 'R') {
-		added += horizontal_moves(b, c, list, 8);
-	} else if (at(b, c).type == 'Q') {
-		added += diagonal_moves(b, c, list, 8);
-		added += horizontal_moves(b, c, list + added, 8);
-
-	} else if (at(b, c).type == 'K') {
-		added += diagonal_moves(b, c, list, 1);
-		added += horizontal_moves(b, c, list + added, 1);
-		added += castle_moves(b, c, list + added);
+		break;
+		case 'B':
+			added += diagonal_moves(b, c, list, 8);
+		break;
+		case 'R':
+			added += horizontal_moves(b, c, list, 8);
+		break;
+		case 'Q':
+			added += diagonal_moves(b, c, list, 8);
+			added += horizontal_moves(b, c, list + added, 8);
+		break;
+		case 'K':
+			added += diagonal_moves(b, c, list, 1);
+			added += horizontal_moves(b, c, list + added, 1);
+			added += castle_moves(b, c, list + added);
+		break;
+		default: assert(false);
 	}
 	return added;
 }
