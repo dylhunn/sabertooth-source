@@ -30,8 +30,8 @@ static const int NEG_INFINITY = INT_MIN + 10;
 extern searchstats sstats;
 
 int search(board *b, int ply);
-int ab_max(board *b, int alpha, int beta, int ply);
-int ab_min(board *b, int alpha, int beta, int ply);
+int ab(board *b, int alpha, int beta, int ply);
+//int ab_min(board *b, int alpha, int beta, int ply);
 void apply(board *b, move m);
 void unapply(board *b, move m);
 

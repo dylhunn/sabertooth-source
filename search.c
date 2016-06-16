@@ -44,16 +44,17 @@ int mtd_f(board *board, int ply) {
 	int lower_bound = NEG_INFINITY;
 	while (lower_bound < upper_bound) {
 		int b = g > lower_bound+1 ? g : lower_bound+1;
-		if (board->black_to_move) g = ab_min(board, b-1, b, ply);
-		else g = ab_max(board, b-1, b, ply);
+		if (board->black_to_move) g = ab(board, -b, -(b-1), ply);
+		else g = ab(board, b-1, b, ply);
 		if (g < b) upper_bound = g;
 		else lower_bound = g;
 	}
 	return g;
 }
 
-int ab_max(board *b, int alpha, int beta, int ply) {
+int ab(board *b, int alpha, int beta, int ply) {
 	evaluation *stored = tt_get(b);
+	if (stored != NULL) assert(!m_eq(stored->best, no_move));
 	if (stored != NULL && stored->depth >= ply) {
 		if (stored->type == at_least) {
 			if (stored->score >= beta) return beta;
@@ -93,9 +94,10 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 	for (int i = num_children - 1; i >= 0; i--) {
 		uint64_t old_hash = b->hash; // for debugging
 		apply(b, moves[i]);
-		int score = ab_min(b, alpha, beta, ply - 1);
+		//int score = ab_min(b, alpha, beta, ply - 1);
+		int score = -ab(b, -beta, -alpha, ply - 1);
+		unapply(b, moves[i]);
 		if (score >= beta) {
-			unapply(b, moves[i]);
 			assert (old_hash == b->hash);
 			tt_put(b, (evaluation){moves[i], score, at_least, ply});
 			free(moves);
@@ -106,7 +108,6 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 			chosen_move = moves[i];
 			if (score > alpha) alpha = score;
 		}
-		unapply(b, moves[i]);
 		assert (old_hash == b->hash);
 	}
 	tt_put(b, (evaluation){chosen_move, alpha, exact, ply});
@@ -114,70 +115,23 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 	return alpha;
 }
 
-int ab_min(board *b, int alpha, int beta, int ply) {
+int quiesce(board *b, int alpha, int beta, int ply) {
 	evaluation *stored = tt_get(b);
-	if (stored != NULL && stored->depth >= ply) {
+	// Any non-quiescence node would have continued through the quiescence search.
+	// Any shallower quiescence node will have a later abort point. (TODO: can we remove the depth check?)
+	if (stored != NULL) assert(!m_eq(stored->best, no_move));
+	if (stored != NULL && stored->depth >= ply) { 
 		if (stored->type == at_least) {
 			if (stored->score >= beta) return beta;
 		} else if (stored->type == at_most) {
 			//if (stored->score <= alpha) return alpha;
 		} else { // exact
-			if (stored->score <= alpha) return alpha; // respect fail-hard cutoff
-			if (stored->score > beta) return beta; // alpha cutoff
+			if (stored->score >= beta) return beta; // respect fail-hard cutoff
+			if (stored->score < alpha) return alpha; // alpha cutoff
 			return stored->score;
 		}
 	}
 
-	if (ply == 0) return -quiesce(b, -beta, -alpha, ply);
-
-	sstats.nodes_searched++;
-
-	int num_children = 0;
-	move chosen_move = no_move;
-	move *moves = board_moves(b, &num_children);
-	assert(num_children > 0);
-
-	// start with the move from the transposition table
-	if (stored != NULL) {
-		assert(!m_eq(stored->best, no_move));
-		// check that the move is valid, in case of a hash collision
-		// TODO is this necessary?
-		if (is_legal_move(b, stored->best)) {
-			moves[num_children] = stored->best;
-			num_children++;
-		} else {
-			char buffer[6];
-			printf("Erroneous move in TT: %s\n", move_to_string(stored->best, buffer));
-			printf("Board state at time of error: \n");
-		}
-	}
-
-	int localbest = POS_INFINITY;
-	for (int i = num_children - 1; i >= 0; i--) {
-		uint64_t old_hash = b->hash; // for debugging
-		apply(b, moves[i]);
-		int score = ab_max(b, alpha, beta, ply - 1);
-		if (score <= alpha) {
-			unapply(b, moves[i]);
-			assert (old_hash == b->hash);
-			tt_put(b, (evaluation){moves[i], score, at_most, ply});
-			free(moves);
-			return alpha; // fail-hard
-		}
-		if (score <= localbest) {
-			localbest = score;
-			chosen_move = moves[i];
-			if (score < beta) beta = score;
-		}
-		unapply(b, moves[i]);
-		assert (old_hash == b->hash);
-	}
-	tt_put(b, (evaluation){chosen_move, beta, exact, ply});
-	free(moves);
-	return beta;
-}
-
-int quiesce(board *b, int alpha, int beta, int ply) {
 	sstats.qnodes_searched++;
 
 	int stand_pat = evaluate(b);
@@ -194,16 +148,26 @@ int quiesce(board *b, int alpha, int beta, int ply) {
 
 	// Sort exchanges using MVV-LVA
 	qsort_r(moves, num_children, sizeof(move), b, capture_move_comparator);
+	move localbestmove = no_move;
+	int localbest = POS_INFINITY;
 	for (int i = 0; i < num_children; i++) {
 		if (p_eq(moves[i].captured, no_piece)) continue;
 		apply(b, moves[i]);
 		int child_score = quiesce(b, -beta, -alpha, ply-1);
 		unapply(b, moves[i]);
 		if (child_score >= beta) {
+			tt_put(b, (evaluation){moves[i], child_score, at_least, ply});
 			free(moves);
 			return beta;
 		}
-		if (child_score > alpha) alpha = child_score;
+		if (child_score > localbest) {
+			localbest = child_score;
+			localbestmove = moves[i];
+			if (child_score > alpha) alpha = child_score;
+		}
+	}
+	if (!m_eq(no_move, localbestmove)) { // This should only fail for terminal nodes (with no captures)
+		tt_put(b, (evaluation){localbestmove, alpha, exact, ply});
 	}
 	free(moves);
 	return alpha;
