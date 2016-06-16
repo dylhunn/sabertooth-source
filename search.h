@@ -20,6 +20,12 @@ static const coord wkr = (coord) {7, 0};
 static const coord bqr = (coord) {0, 7};
 static const coord bkr = (coord) {7, 7};
 
+static const int quiesce_ply_cutoff = 30; // Quiescence search will cut off after this many plies
+
+// Because negating INT_MIN has awful consequences
+static const int POS_INFINITY = INT_MAX - 10;
+static const int NEG_INFINITY = INT_MIN + 10;
+
 // set by last call to search()
 extern searchstats sstats;
 

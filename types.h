@@ -70,7 +70,9 @@ typedef struct evaluation {
 typedef struct searchstats {
 	int depth; // the depth of the current search
 	double time; // time at this depth in ms
-	uint64_t nodes_searched;
+	uint64_t nodes_searched; // non-quiescence, non-TT nodes considered
+	uint64_t qnodes_searched;
+	uint64_t qnode_aborts; // quiescence search abandoned due to depth
 } searchstats;
 
 #endif

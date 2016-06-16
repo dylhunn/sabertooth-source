@@ -212,8 +212,10 @@ bool string_to_move(board *b, char *str, move *m) {
 			goto fail;
 	}
 
-	if (m->to.col == m->from.col + 2) m->c = K;
-	else if (m->to.col == m->from.col - 3) m->c = Q;
+	if (at(b, m->from).type == 'K') {
+		if (m->to.col == m->from.col + 2) m->c = K;
+		else if (m->to.col == m->from.col - 3) m->c = Q;
+	}
 	else m->c = N;
 
 	bool found = false;

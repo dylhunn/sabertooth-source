@@ -3,10 +3,15 @@
 // set by last call to search()
 searchstats sstats;
 
+int mtd_f(board *b, int ply);
+int quiesce(board *b, int alpha, int beta, int ply);
+
 int clear_stats() {
 	sstats.time = 0;
 	sstats.depth = 0;
 	sstats.nodes_searched = 0;
+	sstats.qnodes_searched = 0;
+	sstats.qnode_aborts = 0;
 }
 
 int search(board *b, int ply) {
@@ -16,15 +21,35 @@ int search(board *b, int ply) {
     // start timer
     gettimeofday(&t1, NULL);
 	int result;
-	if (b->black_to_move) result = ab_min(b, INT_MIN, INT_MAX, ply);
-	else result = ab_max(b, INT_MIN, INT_MAX, ply);
+	if (b->black_to_move) result = ab_min(b, NEG_INFINITY, POS_INFINITY, ply);
+	else result = ab_max(b, NEG_INFINITY, POS_INFINITY, ply);
+	//mtd_f(b, ply);
+
 	gettimeofday(&t2, NULL);
     // compute and print the elapsed time in millisec
-    double search_millisec = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
-    search_millisec += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+    double search_millisec = (t2.tv_sec - t1.tv_sec) * 1000.0; // sec to ms
+    search_millisec += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
     sstats.time = search_millisec;
     return result;
 
+}
+
+int mtd_f(board *board, int ply) {
+	int f; // first guess of evaluation
+	evaluation *stored = tt_get(board);
+	if (stored != NULL) f = stored->score;
+	else f = evaluate(board);
+	int g = f;
+	int upper_bound = POS_INFINITY;
+	int lower_bound = NEG_INFINITY;
+	while (lower_bound < upper_bound) {
+		int b = g > lower_bound+1 ? g : lower_bound+1;
+		if (board->black_to_move) g = ab_min(board, b-1, b, ply);
+		else g = ab_max(board, b-1, b, ply);
+		if (g < b) upper_bound = g;
+		else lower_bound = g;
+	}
+	return g;
 }
 
 // DUPLICATE, DO NOT EDIT
@@ -52,8 +77,6 @@ void print_board_d(board *b) {
 	printf("\n");
 }
 
-void ttt() {2+2;};
-
 int ab_max(board *b, int alpha, int beta, int ply) {
 	evaluation *stored = tt_get(b);
 	if (stored != NULL && stored->depth >= ply) {
@@ -68,7 +91,10 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 		}
 	}	
 
-	if (ply == 0) return evaluate(b);
+	if (ply == 0) return quiesce(b, alpha, beta, ply);
+
+	sstats.nodes_searched++;
+
 	int num_children = 0;
 	move chosen_move = no_move;
 	move *moves = board_moves(b, &num_children);
@@ -90,15 +116,10 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 		}
 	}
 
-	int localbest = INT_MIN;
+	int localbest = NEG_INFINITY;
 	for (int i = num_children - 1; i >= 0; i--) {
-
 		uint64_t old_hash = b->hash; // for debugging
-
-				board storedb = *b;
-
 		apply(b, moves[i]);
-		sstats.nodes_searched++;
 		int score = ab_min(b, alpha, beta, ply - 1);
 		if (score >= beta) {
 			unapply(b, moves[i]);
@@ -107,13 +128,12 @@ int ab_max(board *b, int alpha, int beta, int ply) {
 			free(moves);
 			return beta; // fail-hard
 		}
-		if (score > localbest) {
+		if (score >= localbest) {
 			localbest = score;
 			chosen_move = moves[i];
 			if (score > alpha) alpha = score;
 		}
 		unapply(b, moves[i]);
-		if (old_hash != b->hash) ttt();
 		assert (old_hash == b->hash);
 	}
 	tt_put(b, (evaluation){chosen_move, alpha, exact, ply});
@@ -125,9 +145,9 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 	evaluation *stored = tt_get(b);
 	if (stored != NULL && stored->depth >= ply) {
 		if (stored->type == at_least) {
-			//if (stored->score >= beta) return beta;
+			if (stored->score >= beta) return beta;
 		} else if (stored->type == at_most) {
-			if (stored->score <= alpha) return alpha;
+			//if (stored->score <= alpha) return alpha;
 		} else { // exact
 			if (stored->score <= alpha) return alpha; // respect fail-hard cutoff
 			if (stored->score > beta) return beta; // alpha cutoff
@@ -135,7 +155,10 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 		}
 	}
 
-	if (ply == 0) return evaluate(b);
+	if (ply == 0) return -quiesce(b, -beta, -alpha, ply);
+
+	sstats.nodes_searched++;
+
 	int num_children = 0;
 	move chosen_move = no_move;
 	move *moves = board_moves(b, &num_children);
@@ -157,14 +180,10 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 		}
 	}
 
-	int localbest = INT_MAX;
+	int localbest = POS_INFINITY;
 	for (int i = num_children - 1; i >= 0; i--) {
-
 		uint64_t old_hash = b->hash; // for debugging
-		board storedb = *b;
-
 		apply(b, moves[i]);
-		sstats.nodes_searched++;
 		int score = ab_max(b, alpha, beta, ply - 1);
 		if (score <= alpha) {
 			unapply(b, moves[i]);
@@ -173,7 +192,7 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 			free(moves);
 			return alpha; // fail-hard
 		}
-		if (score < localbest) {
+		if (score <= localbest) {
 			localbest = score;
 			chosen_move = moves[i];
 			if (score < beta) beta = score;
@@ -184,6 +203,32 @@ int ab_min(board *b, int alpha, int beta, int ply) {
 	tt_put(b, (evaluation){chosen_move, beta, exact, ply});
 	free(moves);
 	return beta;
+}
+
+int quiesce(board *b, int alpha, int beta, int ply) {
+	sstats.qnodes_searched++;
+
+	int stand_pat = evaluate(b);
+	if (b->black_to_move) stand_pat = -stand_pat;
+	//return stand_pat;
+	if (stand_pat >= beta) return beta;
+	if (alpha < stand_pat) alpha = stand_pat;
+	if (ply < -quiesce_ply_cutoff) {
+		sstats.qnode_aborts++;
+		return stand_pat;
+	}
+
+	int num_children = 0;
+	move *moves = board_moves(b, &num_children);
+	for (int i = 0; i < num_children; i++) {
+		if (p_eq(moves[i].captured, no_piece)) continue;
+		apply(b, moves[i]);
+		int child_score = quiesce(b, -beta, -alpha, ply-1);
+		unapply(b, moves[i]);
+		if (child_score >= beta) return beta;
+		if (child_score > alpha) alpha = child_score;
+	}
+	return alpha;
 }
 
 void apply(board *b, move m) {
@@ -206,7 +251,7 @@ void apply(board *b, move m) {
 		uint8_t rook_from_col = ((m.c == K) ? 7 : 0);
 		uint8_t rook_to_col = ((m.c == K) ? 5 : 2);
 		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.from.row});
-		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white};
+		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white}; // !!
 		b->b[rook_from_col][m.from.row] = no_piece;
 		b->hash ^= tt_pieceval(b, (coord){rook_to_col, m.to.row});
 	}

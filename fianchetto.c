@@ -6,8 +6,10 @@
  * - MTD(f)
  *
  * Other TODO items:
- * - Unknown bug corrupting board position
  * - Identify game-ending conditions
+ * - En passant
+ * - No castling through check
+ * - Search function should account for 50-move and repeated-move draws
  */
 
 #include <assert.h>
@@ -140,7 +142,8 @@ void print_analysis(board *b_orig) {
 		apply(b, eval->best);
 		eval = tt_get(b);
 	} while (eval != NULL && /*!m_eq(eval->best, no_move) &&*/ curr_depth-- > 0);
-	printf("(%llu new nodes in %.0fms)", sstats.nodes_searched, sstats.time);
+	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms)", 
+		sstats.nodes_searched, sstats.qnodes_searched, sstats.qnode_aborts, sstats.time);
 	printf("\n");
 }
 

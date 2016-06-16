@@ -79,20 +79,13 @@ uint64_t tt_hash_position(board *b) {
 
 // TODO - permit storing both upper and lower bounds in an inexact node
 void tt_put(board *b, evaluation e) {
-
-	// debug
-	/*move watchfor = {{2, 5}, {3, 3}, {'K', true}, no_piece, N};
-	if (m_eq(e.best, watchfor)) {
-		printf("Alert!\n");
-		hhh();
-	}*/
-
-
 	assert(is_initialized);
-	//assert(tt_hash_position(b) == b->hash);
 	if (tt_count >= tt_rehash_count) {
-		if (!tt_expand()) {
+		if (allow_tt_expansion && !tt_expand()) {
 			printf("ERROR: Failed to expand transposition table from %llu entries.\n", tt_count);
+			return;
+		}
+		if (!allow_tt_expansion) {
 			return;
 		}
 	}
@@ -141,7 +134,7 @@ bool tt_expand(void) {
 	printf("Expanding transposition table...\n");
 	uint64_t new_size = tt_size * 2;
 	uint64_t *new_keys = malloc(sizeof(uint64_t) * new_size);
-	evaluation *new_values = malloc(sizeof(uint64_t) * new_size);
+	evaluation *new_values = malloc(sizeof(evaluation) * new_size);
 	if (new_keys == NULL || new_values == NULL) return false;
 	memset(new_keys, 0, new_size * sizeof(uint64_t)); // zero out keys
 	for (uint64_t i = 0; i < tt_size; i++) { // for every old index

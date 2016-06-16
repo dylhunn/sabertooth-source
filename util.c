@@ -15,7 +15,8 @@ bool c_eq(coord a, coord b) {
 }
 
 bool m_eq(move a, move b) {
-	return c_eq(a.from, b.from) && c_eq(a.to, b.to) && p_eq(a.captured, b.captured) && p_eq(a.promote_to, b.promote_to);
+	return c_eq(a.from, b.from) && c_eq(a.to, b.to) && p_eq(a.captured, b.captured) 
+		&& p_eq(a.promote_to, b.promote_to) && a.c == b.c;
 }
 
 bool in_bounds(coord c) {
