@@ -1,32 +1,135 @@
 #include "evaluate.h"
 
+// transform coordinates to access piece tables
+inline int ptw(int c, int r) {
+	return c+56-(r*8);
+}
+
+inline int ptb(int c, int r) {
+	return c+(r*8);
+}
+
+// Piece-Square tables, from white's perspective
+
+int ptable_pawn[64] = {  
+   0,  0,  0,  0,  0,  0,  0,  0,
+  30, 35, 35, 40, 40, 35, 35, 30,
+  20, 25, 25, 30, 30, 25, 25, 20,
+  10, 20, 20, 20, 20, 20, 20, 10,
+   3,  0, 15, 15, 15, 15,  0,  3,
+   0,  5,  3,  0,  0,  3,  5,  0,
+   5,  5,  5,  5,  5,  5,  5,  5,
+   0,  0,  0,  0,  0,  0,  0,  0
+};
+
+int ptable_knight[64] = {  
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  5,  6,  7,  7,  6,  5,  0,
+   0,  7, 15, 20, 20, 15,  7,  0,
+   0,  7, 15, 27, 27, 15,  7,  0,
+   0,  7, 15, 25, 25, 15,  7,  0,
+  -5,  5, 10, 15, 15, 10,  5, -5,
+   0,  3,  5,  7,  7,  5,  3,  0,
+   0,  0,  0,  0,  0,  0,  0,  0
+};
+
+int ptable_bishop[64] = {  
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0, 10, 10, 20, 20, 10, 10,  0,
+   0, 10, 30, 30, 30, 30, 10,  0,
+   0, 10, 20, 40, 40, 20, 10,  0,
+   0, 10, 30, 40, 40, 30, 10,  0,
+   0, 15, 30, 10, 10, 30, 15,  0,
+   0, 20,  0,  5,  5,  0, 20,  0,
+   0,  0,  0,  0,  0,  0,  0,  0
+};
+
+int ptable_rook[64] = {  
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0, 10, 10, 10, 10, 10, 10,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  5,  0,  0,  5,  0,  0
+};
+
+int ptable_queen[64] = {  
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0, 10, 10,  0,  0,  0,
+   0,  0,  0, 10, 10,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  5,  0,  0,  0,  0
+};
+
+int ptable_king[64] = {  
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0, 10, 10,  0,  0,  0,
+   0,  0,  0, 10, 10,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0, 20,  0, 10,  0, 20,  0
+};
+
 // Statically evaluates a board position.
 // Positive numbers indicate white advantage.
 // Returns result in centipawns.
 int evaluate(board *b) {
 	int score = 0;
-	score += evaluate_material(b);
+	score += square_by_square(b);
 	return score;
 }
 
-int evaluate_material(board *b) {
+int square_by_square(board *b) {
 	int eval = 0;
-	for (int i = 0; i < 8; i++) {
-		for (int j = 0; j < 8; j++) {
-			if (p_eq(no_piece, b->b[i][j])) continue;
-			float piece_val = 0;
-			switch (b->b[i][j].type) {
-				case 'P': piece_val = 100; break;
-				case 'N': piece_val = 320; break;
-				case 'B': piece_val = 330; break;
-				case 'R': piece_val = 500; break;
-				case 'Q': piece_val = 900; break;
-				case 'K': piece_val = 30000; break;
-				default: assert(false);
-			}
-			if (!b->b[i][j].white) piece_val = -piece_val;
-			eval += piece_val;
+	for (int c = 0; c < 8; c++) { // cols
+		for (int r = 0; r < 8; r++) { // rowsm
+			piece p = b->b[c][r];
+			if (p_eq(no_piece, p)) continue;
+			eval += piece_val(p);
+			eval += piece_square_val(p, c, r);
 		}
 	}
 	return eval;
+}
+
+int piece_val(piece p) {
+	int piece_val;
+	switch (p.type) {
+		case 'P': piece_val = 100; break;
+		case 'N': piece_val = 320; break;
+		case 'B': piece_val = 330; break;
+		case 'R': piece_val = 500; break;
+		case 'Q': piece_val = 900; break;
+		case 'K': piece_val = 30000; break;
+		default: assert(false);
+	}
+	if (!p.white) piece_val = -piece_val;
+	return piece_val;
+}
+
+int piece_square_val(piece p, int c, int r) {
+	int tableidx = (p.white) ? ptw(c, r) : ptb(c, r);
+	int table_val;
+	switch (p.type) {
+		case 'P': table_val = ptable_pawn[tableidx]; break;
+		case 'N': table_val = ptable_knight[tableidx]; break;
+		case 'B': table_val = ptable_bishop[tableidx]; break;
+		case 'R': table_val = ptable_rook[tableidx]; break;
+		case 'Q': table_val = ptable_queen[tableidx]; break;
+		case 'K': table_val = ptable_king[tableidx]; break;
+		default: assert(false);
+	}
+	if (!p.white) table_val = -table_val;
+	return table_val;
+}
+
+int apply_table(int col, int row) {
+
 }
