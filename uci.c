@@ -2,6 +2,7 @@
 
 void process_command(char *command_str);
 void *search_entrypoint(void *param);
+void print_pv(int maxdepth);
 
 // Called after the engine recieves the string "uci."
 // Configures the engine with the GUI and loops, waiting for commands.

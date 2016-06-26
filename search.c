@@ -5,9 +5,9 @@ searchstats sstats;
 
 int mtd_f(board *b, int ply);
 int quiesce(board *b, int alpha, int beta, int ply);
-int capture_move_comparator(board *board, move *a, move *b);
+int capture_move_comparator(const board *board, const move *a, const move *b);
 
-int clear_stats() {
+void clear_stats() {
 	sstats.time = 0;
 	sstats.depth = 0;
 	sstats.nodes_searched = 0;
@@ -36,15 +36,15 @@ int search(board *b, int ply) {
 
 int mtd_f(board *board, int ply) {
 	int f; // first guess of evaluation
-	evaluation *stored = tt_get(board);
-	if (stored != NULL) f = stored->score;
+	evaluation *stored = tt_get(board); // Use last pass in TT
+	if (stored != NULL) f = stored->score; // If not present, use static eval guess
 	else f = evaluate(board);
 	int g = f;
 	int upper_bound = POS_INFINITY;
 	int lower_bound = NEG_INFINITY;
 	while (lower_bound < upper_bound) {
 		int b = g > lower_bound+1 ? g : lower_bound+1;
-		if (board->black_to_move) g = ab(board, -b, -(b-1), ply);
+		if (board->black_to_move) g = -ab(board, -b, -(b-1), ply);
 		else g = ab(board, b-1, b, ply);
 		if (g < b) upper_bound = g;
 		else lower_bound = g;
@@ -65,7 +65,7 @@ int ab(board *b, int alpha, int beta, int ply) {
 			if (stored->score < alpha) return alpha; // alpha cutoff
 			return stored->score;
 		}
-	}	
+	}
 
 	if (ply == 0) return quiesce(b, alpha, beta, ply);
 
@@ -99,7 +99,7 @@ int ab(board *b, int alpha, int beta, int ply) {
 		unapply(b, moves[i]);
 		if (score >= beta) {
 			assert (old_hash == b->hash);
-			tt_put(b, (evaluation){moves[i], score, at_least, ply});
+			tt_put(b, (evaluation){moves[i], score, at_least, ply, 0});
 			free(moves);
 			return beta; // fail-hard
 		}
@@ -110,7 +110,7 @@ int ab(board *b, int alpha, int beta, int ply) {
 		}
 		assert (old_hash == b->hash);
 	}
-	tt_put(b, (evaluation){chosen_move, alpha, exact, ply});
+	tt_put(b, (evaluation){chosen_move, localbest, exact, ply, 0});
 	free(moves);
 	return alpha;
 }
@@ -135,7 +135,7 @@ int quiesce(board *b, int alpha, int beta, int ply) {
 	sstats.qnodes_searched++;
 
 	int stand_pat = evaluate(b);
-	if (b->black_to_move) stand_pat = -stand_pat;
+	if (b->black_to_move) stand_pat = -stand_pat; // always from perspective of player
 	if (stand_pat >= beta) return beta;
 	if (alpha < stand_pat) alpha = stand_pat;
 	if (ply < -quiesce_ply_cutoff) {
@@ -147,16 +147,16 @@ int quiesce(board *b, int alpha, int beta, int ply) {
 	move *moves = board_moves(b, &num_children);
 
 	// Sort exchanges using MVV-LVA
-	qsort_r(moves, num_children, sizeof(move), b, capture_move_comparator);
+	qsort_r(moves, num_children, sizeof(move), b, &capture_move_comparator);
 	move localbestmove = no_move;
 	int localbest = POS_INFINITY;
 	for (int i = 0; i < num_children; i++) {
 		if (p_eq(moves[i].captured, no_piece)) continue;
 		apply(b, moves[i]);
-		int child_score = quiesce(b, -beta, -alpha, ply-1);
+		int child_score = -quiesce(b, -beta, -alpha, ply-1);
 		unapply(b, moves[i]);
 		if (child_score >= beta) {
-			tt_put(b, (evaluation){moves[i], child_score, at_least, ply});
+			tt_put(b, (evaluation){moves[i], child_score, at_least, ply, 0});
 			free(moves);
 			return beta;
 		}
@@ -167,7 +167,7 @@ int quiesce(board *b, int alpha, int beta, int ply) {
 		}
 	}
 	if (!m_eq(no_move, localbestmove)) { // This should only fail for terminal nodes (with no captures)
-		tt_put(b, (evaluation){localbestmove, alpha, exact, ply});
+		tt_put(b, (evaluation){localbestmove, localbest, exact, ply, 0});
 	}
 	free(moves);
 	return alpha;
@@ -178,7 +178,7 @@ int quiesce(board *b, int alpha, int beta, int ply) {
 // Returns -1 if the first argument should come first, etc.
 // COMPATIBILITY WARNING: When compiling with GNU libraries (Linux), the argument order
 // is silently permuted! This uses the BSD/OS X ordering.
-int capture_move_comparator(board *board, move *a, move *b) {
+int capture_move_comparator(const board *board, const move *a, const move *b) {
 	int a_victim_value;
 	switch(a->captured.type) {
 		case 'P': a_victim_value = 1; break;

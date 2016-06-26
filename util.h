@@ -28,7 +28,7 @@ bool m_eq(move a, move b);
 
 bool in_bounds(coord c);
 
-piece at(board *b, coord c);
+piece at(const board *b, coord c);
 
 void set(board *b, coord c, piece p);
 

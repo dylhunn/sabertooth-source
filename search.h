@@ -29,6 +29,8 @@ static const int NEG_INFINITY = INT_MIN + 10;
 // set by last call to search()
 extern searchstats sstats;
 
+void clear_stats(void);
+
 int search(board *b, int ply);
 int ab(board *b, int alpha, int beta, int ply);
 //int ab_min(board *b, int alpha, int beta, int ply);

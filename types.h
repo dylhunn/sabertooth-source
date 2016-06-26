@@ -50,7 +50,7 @@ typedef struct board {
 
 	// the true ply number of the game, which has no bearing on the current board state
 	// used only for disposing of ancient entries in the transposition table
-	int true_game_ply_clock; 
+	uint16_t true_game_ply_clock; 
 } board;
 
 typedef enum evaltype {
@@ -63,7 +63,7 @@ typedef struct evaluation {
 	move best;
 	int score;
 	evaltype type;
-	uint8_t depth;
+	int depth;
 	uint16_t last_access_move; // used for age to delete ancient entries; set automatically by the TT
 } evaluation;
 

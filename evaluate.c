@@ -9,9 +9,13 @@ inline int ptb(int c, int r) {
 	return c+(r*8);
 }
 
+int piece_val(piece p);
+int square_by_square(board *b);
+int piece_square_val(piece p, int c, int r);
+
 // Piece-Square tables, from white's perspective
 
-int ptable_pawn[64] = {  
+static int ptable_pawn[64] = {  
    0,  0,  0,  0,  0,  0,  0,  0,
   30, 35, 35, 40, 40, 35, 35, 30,
   20, 25, 25, 30, 30, 25, 25, 20,
@@ -22,7 +26,7 @@ int ptable_pawn[64] = {
    0,  0,  0,  0,  0,  0,  0,  0
 };
 
-int ptable_knight[64] = {  
+static int ptable_knight[64] = {  
    0,  0,  0,  0,  0,  0,  0,  0,
    0,  5,  6,  7,  7,  6,  5,  0,
    0,  7, 15, 20, 20, 15,  7,  0,
@@ -33,7 +37,7 @@ int ptable_knight[64] = {
    0,  0,  0,  0,  0,  0,  0,  0
 };
 
-int ptable_bishop[64] = {  
+static int ptable_bishop[64] = {  
    0,  0,  0,  0,  0,  0,  0,  0,
    0, 10, 10, 20, 20, 10, 10,  0,
    0, 10, 30, 30, 30, 30, 10,  0,
@@ -44,7 +48,7 @@ int ptable_bishop[64] = {
    0,  0,  0,  0,  0,  0,  0,  0
 };
 
-int ptable_rook[64] = {  
+static int ptable_rook[64] = {  
    0,  0,  0,  0,  0,  0,  0,  0,
    0, 10, 10, 10, 10, 10, 10,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
@@ -55,7 +59,7 @@ int ptable_rook[64] = {
    0,  0,  5,  0,  0,  5,  0,  0
 };
 
-int ptable_queen[64] = {  
+static int ptable_queen[64] = {  
    0,  0,  0,  0,  0,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
@@ -66,7 +70,7 @@ int ptable_queen[64] = {
    0,  0,  0,  5,  0,  0,  0,  0
 };
 
-int ptable_king[64] = {  
+static int ptable_king[64] = {  
    0,  0,  0,  0,  0,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
@@ -89,7 +93,7 @@ int evaluate(board *b) {
 int square_by_square(board *b) {
 	int eval = 0;
 	for (int c = 0; c < 8; c++) { // cols
-		for (int r = 0; r < 8; r++) { // rowsm
+		for (int r = 0; r < 8; r++) { // rows
 			piece p = b->b[c][r];
 			if (p_eq(no_piece, p)) continue;
 			eval += piece_val(p);
@@ -128,8 +132,4 @@ int piece_square_val(piece p, int c, int r) {
 	}
 	if (!p.white) table_val = -table_val;
 	return table_val;
-}
-
-int apply_table(int col, int row) {
-
 }

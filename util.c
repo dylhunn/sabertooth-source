@@ -23,7 +23,7 @@ bool in_bounds(coord c) {
 	return c.row <= 7 && c.col <= 7; // coordinates are unsigned
 }
 
-piece at(board *b, coord c) {
+piece at(const board *b, coord c) {
 	return b->b[c.col][c.row];
 }
 

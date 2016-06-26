@@ -150,6 +150,7 @@ void print_analysis(board *b_orig) {
 void iterative_deepen(board *b, int max_depth) {
 	printf("Iterative Deepening Analysis Results (including cached analysis)\n");
 	for (int i = 1; i <= max_depth; i++) {
+		clear_stats();
 		printf("Searching at depth %d... ", i);
 		fflush(stdout);
 		search(b, i);
