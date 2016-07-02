@@ -113,7 +113,7 @@ int pawn_moves(board *b, coord c, move *list) {
 	}
 	for (int8_t dx = -1; dx <= 1; dx += 2) { // both capture directions
 		coord cap = {c.col + dx, c.row + dy};
-		if (!in_bounds(cap) || p_eq(at(b, cap), no_piece)) continue;
+		if (!in_bounds(cap) || p_eq(at(b, cap), no_piece) || at(b, cap).white == cp.white) continue;
 		if (promote) {
 			for (int i = 0; i < 4; i++)
 				if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), 

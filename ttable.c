@@ -12,7 +12,7 @@ uint64_t zobrist_black_to_move;
 
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
-static uint64_t tt_size = TT_STARTING_SIZE;
+static uint64_t tt_size;
 static uint64_t tt_count = 0;
 static uint64_t tt_rehash_count; // computed based on max_load
 
@@ -28,6 +28,10 @@ static inline uint64_t tt_index(board *b) {
 
 // Invoke to prepare transposition table
 void tt_init(void) {
+	// first, compute size from memory use
+	const uint64_t bytes_in_mb = 1000000;
+	tt_size = (TT_MEGABYTES * bytes_in_mb) / (sizeof(evaluation) + sizeof(uint8_t));
+
 	if (tt_keys != NULL) free(tt_keys);
 	if (tt_values != NULL) free(tt_values);
 	tt_keys = malloc(sizeof(uint64_t) * tt_size);
@@ -82,10 +86,13 @@ void tt_put(board *b, evaluation e) {
 	assert(is_initialized);
 	if (tt_count >= tt_rehash_count) {
 		if (allow_tt_expansion && !tt_expand()) {
-			printf("ERROR: Failed to expand transposition table from %llu entries.\n", tt_count);
+			printf("ERROR: Failed to expand transposition table from %llu entries; clearing.\n", tt_count);
+			tt_clear();
 			return;
 		}
 		if (!allow_tt_expansion) {
+			printf("Transposition table filled; clearing.\n");
+			tt_clear();
 			return;
 		}
 	}

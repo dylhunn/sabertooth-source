@@ -4,7 +4,7 @@
 searchstats sstats;
 
 int mtd_f(board *b, int ply);
-int quiesce(board *b, int alpha, int beta, int ply);
+int negaquiesce(board *b, int alpha, int beta, int ply);
 int capture_move_comparator(const board *board, const move *a, const move *b);
 
 void clear_stats() {
@@ -22,8 +22,8 @@ int search(board *b, int ply) {
     // start timer
     gettimeofday(&t1, NULL);
 	int result;
-	//if (b->black_to_move) result = ab_min(b, NEG_INFINITY, POS_INFINITY, ply);
-	//else result = ab_max(b, NEG_INFINITY, POS_INFINITY, ply);
+	/*if (b->black_to_move) result = -negamax(b, POS_INFINITY, NEG_INFINITY, ply);
+	else result = negamax(b, NEG_INFINITY, POS_INFINITY, ply);*/
 	result = mtd_f(b, ply);
 
 	gettimeofday(&t2, NULL);
@@ -35,39 +35,49 @@ int search(board *b, int ply) {
 }
 
 int mtd_f(board *board, int ply) {
-	int f; // first guess of evaluation
+	int g; // first guess of evaluation
 	evaluation *stored = tt_get(board); // Use last pass in TT
-	if (stored != NULL) f = stored->score; // If not present, use static eval guess
-	else f = evaluate(board);
-	int g = f;
+	if (stored != NULL) g = stored->score; // If not present, use static eval guess
+	else g = evaluate(board);
 	int upper_bound = POS_INFINITY;
 	int lower_bound = NEG_INFINITY;
 	while (lower_bound < upper_bound) {
-		int b = g > lower_bound+1 ? g : lower_bound+1;
-		if (board->black_to_move) g = -ab(board, -b, -(b-1), ply);
-		else g = ab(board, b-1, b, ply);
-		if (g < b) upper_bound = g;
+		int beta;
+		if (g == lower_bound) beta = g+1;
+		else beta = g;
+		if (board->black_to_move) g = -negamax(board, -beta, -(beta-1), ply);
+		else g = negamax(board, beta-1, beta, ply);
+		if (g < beta) upper_bound = g;
 		else lower_bound = g;
 	}
 	return g;
 }
 
-int ab(board *b, int alpha, int beta, int ply) {
+int negamax(board *b, int alpha, int beta, int ply) {
+	int alpha_orig = alpha;
+
 	evaluation *stored = tt_get(b);
-	if (stored != NULL) assert(!m_eq(stored->best, no_move));
 	if (stored != NULL && stored->depth >= ply) {
-		if (stored->type == at_least) {
-			if (stored->score >= beta) return beta;
-		} else if (stored->type == at_most) {
-			//if (stored->score <= alpha) return alpha;
-		} else { // exact
-			if (stored->score >= beta) return beta; // respect fail-hard cutoff
-			if (stored->score < alpha) return alpha; // alpha cutoff
+		if (stored->type == exact) {
 			return stored->score;
+		} else if (stored->type == lowerbound) {
+			alpha = max(alpha, stored->score);
+		} else if (stored->type == upperbound) { // upperbound
+			beta = min(beta, stored->score);
+		}
+
+		// Ignore qnodes
+		if (stored->type != qlowerbound && stored->type != qupperbound && stored->type != qexact) {
+			if (alpha >= beta) return stored->score;
 		}
 	}
 
-	if (ply == 0) return quiesce(b, alpha, beta, ply);
+	if (ply == 0) { 
+		return negaquiesce(b, alpha, beta, ply);
+		/*int score = evaluate(b);
+		if (b->black_to_move) score = -score;
+		return score;*/
+	}
 
 	sstats.nodes_searched++;
 
@@ -78,44 +88,123 @@ int ab(board *b, int alpha, int beta, int ply) {
 
 	// start with the move from the transposition table
 	if (stored != NULL) {
-		assert(!m_eq(stored->best, no_move));
-		// check that the move is valid, in case of a hash collision
-		// TODO is this necessary?
-		if (is_legal_move(b, stored->best)) {
+		if (stored->type == exact) assert(!m_eq(stored->best, no_move));
+		if (!m_eq(stored->best, no_move)) {
 			moves[num_children] = stored->best;
 			num_children++;
-		} else {
-			char buffer[6];
-			printf("Erroneous move in TT: %s\n", move_to_string(stored->best, buffer));
 		}
 	}
 
-	int localbest = NEG_INFINITY;
+	int bestval = NEG_INFINITY;
+	move bestmove = no_move;
+
 	for (int i = num_children - 1; i >= 0; i--) {
-		uint64_t old_hash = b->hash; // for debugging
+		//uint64_t old_hash = b->hash; // for debugging
 		apply(b, moves[i]);
-		//int score = ab_min(b, alpha, beta, ply - 1);
-		int score = -ab(b, -beta, -alpha, ply - 1);
+		int score = -negamax(b, -beta, -alpha, ply - 1);
 		unapply(b, moves[i]);
-		if (score >= beta) {
-			assert (old_hash == b->hash);
-			tt_put(b, (evaluation){moves[i], score, at_least, ply, 0});
-			free(moves);
-			return beta; // fail-hard
+		//assert (old_hash == b->hash);
+
+		if (score >= bestval) {
+			bestval = score;
+			bestmove = moves[i];
 		}
-		if (score >= localbest) {
-			localbest = score;
-			chosen_move = moves[i];
-			if (score > alpha) alpha = score;
-		}
-		assert (old_hash == b->hash);
+
+		alpha = max(alpha, score);
+		if (alpha >= beta) break; // TODO if bestval >= beta ??
+
+
 	}
-	tt_put(b, (evaluation){chosen_move, localbest, exact, ply, 0});
 	free(moves);
-	return alpha;
+
+	evaltype restype;
+    if (bestval <= alpha_orig) restype = upperbound; 
+    else if (bestval >= beta) restype = lowerbound;
+    else restype = exact;
+    tt_put(b, (evaluation){bestmove, bestval, restype, ply, 0});
+	return bestval;
 }
 
-int quiesce(board *b, int alpha, int beta, int ply) {
+int negaquiesce(board *b, int alpha, int beta, int ply) {
+	int alpha_orig = alpha;
+
+	evaluation *stored = tt_get(b);
+	if (stored != NULL && stored->depth >= ply) {
+		if (stored->type == exact || stored->type == qexact) {
+			return stored->score;
+		} else if (stored->type == lowerbound || stored->type == qlowerbound) {
+			alpha = max(alpha, stored->score);
+		} else if (stored->type == upperbound || stored->type == qupperbound) {
+			beta = min(beta, stored->score);
+		}
+		if (alpha >= beta) return stored->score;
+	}
+
+	sstats.qnodes_searched++;
+
+	int stand_pat = evaluate(b);
+	if (b->black_to_move) stand_pat = -stand_pat; // TODO should this be negated?
+
+	if (ply < -quiesce_ply_cutoff) { 
+		sstats.qnode_aborts++;
+		return stand_pat;
+	}
+
+	// search cutoffs
+	if (stand_pat >= beta) return stand_pat; // TODO return beta?
+	if (alpha < stand_pat) alpha = stand_pat;
+
+	int num_children = 0;
+	move chosen_move = no_move;
+	move *moves = board_moves(b, &num_children);
+	assert(num_children > 0);
+
+	// start with the move from the transposition table
+	if (stored != NULL) {
+		//if (stored->type == exact) assert(!m_eq(stored->best, no_move));
+		if (!m_eq(stored->best, no_move)) {
+			moves[num_children] = stored->best;
+			num_children++;
+		}
+	}
+
+	// Sort exchanges using MVV-LVA
+	qsort_r(moves, num_children, sizeof(move), b, &capture_move_comparator);
+
+	int bestval = NEG_INFINITY;
+	move bestmove = no_move;
+
+	for (int i = num_children - 1; i >= 0; i--) {
+		if (p_eq(moves[i].captured, no_piece)) continue;
+		//uint64_t old_hash = b->hash; // for debugging
+		apply(b, moves[i]);
+		int score = -negaquiesce(b, -beta, -alpha, ply - 1);
+		unapply(b, moves[i]);
+		//assert (old_hash == b->hash);
+
+		if (score >= bestval) {
+			bestval = score;
+			bestmove = moves[i];
+		}
+
+		alpha = max(alpha, score);
+		if (alpha >= beta) break; // TODO if bestval >= beta ??
+	}
+	free(moves);
+
+	evaltype restype;
+    if (bestval <= alpha_orig) restype = qupperbound; 
+    else if (bestval >= beta) restype = qlowerbound;
+    else restype = qexact;
+    if (!m_eq(no_move, bestmove)) { // This should only fail for terminal nodes (with no captures)
+    	tt_put(b, (evaluation){bestmove, bestval, restype, ply, 0});
+    } else { // no bestval; no moves examined
+    	return stand_pat;
+    }
+	return bestval;
+}
+
+/*int quiesce(board *b, int alpha, int beta, int ply) {
 	evaluation *stored = tt_get(b);
 	// Any non-quiescence node would have continued through the quiescence search.
 	// Any shallower quiescence node will have a later abort point. (TODO: can we remove the depth check?)
@@ -171,11 +260,12 @@ int quiesce(board *b, int alpha, int beta, int ply) {
 	}
 	free(moves);
 	return alpha;
-}
+}*/
 
 // An array sorting comparator for capture moves, for use with qsort_r.
-// Sorts by MVV/LVA (Most Valuable Victim/Least Valuable Attacker).
+// Sorts by MVV/LVA (Most Valuable Victim/Least Valuable Attacker) in REVERSE order.
 // Returns -1 if the first argument should come first, etc.
+// Uses reverse order because of implementation details above.
 // COMPATIBILITY WARNING: When compiling with GNU libraries (Linux), the argument order
 // is silently permuted! This uses the BSD/OS X ordering.
 int capture_move_comparator(const board *board, const move *a, const move *b) {
@@ -186,7 +276,7 @@ int capture_move_comparator(const board *board, const move *a, const move *b) {
 		case 'B': a_victim_value = 3; break;
 		case 'R': a_victim_value = 5; break;
 		case 'Q': a_victim_value = 9; break;
-		case 'K': a_victim_value = 2000; break;
+		case 'K': a_victim_value = 200; break;
 		case '0': a_victim_value = 0; break; // In case we attack an empty square (no_piece)
 		default: assert(false);
 	}
@@ -221,7 +311,7 @@ int capture_move_comparator(const board *board, const move *a, const move *b) {
 		case 'K': b_attacker_value = 20; break;
 		default: assert(false);
 	}
-	return ((b_victim_value << 2) - b_attacker_value) - ((a_victim_value << 2) - a_attacker_value);
+	return ((a_victim_value << 2) - a_attacker_value) - ((b_victim_value << 2) - b_attacker_value);
 } 
 
 void apply(board *b, move m) {

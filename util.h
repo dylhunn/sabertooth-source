@@ -38,5 +38,9 @@ void reset_board(board *b);
 
 bool move_arr_contains(move *moves, move move, int arrlen);
 
+int min(int a, int b);
+
+int max(int a, int b);
+
 #endif
 

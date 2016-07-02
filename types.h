@@ -54,9 +54,12 @@ typedef struct board {
 } board;
 
 typedef enum evaltype {
-	at_least,
-	at_most,
-	exact
+	upperbound,
+	lowerbound,
+	qupperbound,
+	qlowerbound,
+	exact,
+	qexact
 } evaltype;
 
 typedef struct evaluation {

@@ -2,8 +2,7 @@
  * - Store sets of pieces by color for use in:
  *   - board_moves
  *   - evaluate_material
- * - Update TT to provide alpha and beta for non-exact nodes
- * - MTD(f)
+ * - Separate move generator for quiescence
  *
  * Other TODO items:
  * - Identify game-ending conditions
@@ -138,6 +137,7 @@ void print_analysis(board *b_orig) {
 		assert(!m_eq(eval->best, no_move));
 		if (!b->black_to_move) printf("%d.", moveno++);
 		char move[6];
+		if (eval->type == qexact) printf("(q) ");
 		printf("%s ", move_to_string(eval->best, move));
 		apply(b, eval->best);
 		eval = tt_get(b);

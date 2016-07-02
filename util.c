@@ -75,3 +75,11 @@ bool move_arr_contains(move *moves, move move, int arrlen) {
 	}
 	return false;
 }
+
+int min(int a, int b) {
+	return a < b ? a : b;
+}
+
+int max(int a, int b) {
+	return a > b ? a : b;
+}

@@ -43,8 +43,9 @@ uint64_t tt_pieceval(board *b, coord c);
  * Constants and variables
  */
 
-// starting size is prime number
-#define TT_STARTING_SIZE 30000001
+// starting size of table, and whether expansion is allowed
+#define TT_MEGABYTES 2000
+static bool allow_tt_expansion = false;
 
 // Re-hash at 70% load factor
 static const double tt_max_load = .7;
@@ -53,8 +54,6 @@ static const double tt_max_load = .7;
 static const int remove_at_age = 4;
 
 static bool is_initialized = false;
-
-static bool allow_tt_expansion = true;
 
 // Randomly selected zobrist values used to hash board state
 extern uint64_t zobrist[64][12]; // zobrist table for pieces

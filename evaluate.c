@@ -1,11 +1,11 @@
 #include "evaluate.h"
 
 // transform coordinates to access piece tables
-inline int ptw(int c, int r) {
+int ptw(int c, int r) {
 	return c+56-(r*8);
 }
 
-inline int ptb(int c, int r) {
+int ptb(int c, int r) {
 	return c+(r*8);
 }
 
@@ -21,7 +21,7 @@ static int ptable_pawn[64] = {
   20, 25, 25, 30, 30, 25, 25, 20,
   10, 20, 20, 20, 20, 20, 20, 10,
    3,  0, 15, 15, 15, 15,  0,  3,
-   0,  5,  3,  0,  0,  3,  5,  0,
+   0,  5,  3, 10, 10,  3,  5,  0,
    5,  5,  5,  5,  5,  5,  5,  5,
    0,  0,  0,  0,  0,  0,  0,  0
 };
@@ -32,7 +32,7 @@ static int ptable_knight[64] = {
    0,  7, 15, 20, 20, 15,  7,  0,
    0,  7, 15, 27, 27, 15,  7,  0,
    0,  7, 15, 25, 25, 15,  7,  0,
-  -5,  5, 10, 15, 15, 10,  5, -5,
+  -5,  5, 10, 15, 15, 19,  5, -5,
    0,  3,  5,  7,  7,  5,  3,  0,
    0,  0,  0,  0,  0,  0,  0,  0
 };
