@@ -50,7 +50,11 @@ typedef struct board {
 
 	// the true ply number of the game, which has no bearing on the current board state
 	// used only for disposing of ancient entries in the transposition table
-	uint16_t true_game_ply_clock; 
+	uint16_t true_game_ply_clock;
+
+	int attacked[8][8]; // updated by move generator
+	coord white_king;
+	coord black_king;
 } board;
 
 typedef enum evaltype {

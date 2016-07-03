@@ -33,6 +33,6 @@ char *move_to_string(move m, char str[6]);
 bool string_to_move(board *b, char *str, move *m);
 
 // Determines if a specific square is under attack.
-bool in_check(int col, int row);
+bool in_check(board *b, int col, int row, bool by_white);
 
 #endif

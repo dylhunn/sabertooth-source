@@ -65,6 +65,9 @@ void reset_board(board *b) {
 	b->last_move_ply = 0;
 	b->hash = tt_hash_position(b);
 	b->true_game_ply_clock = 0;
+	for (int i = 0; i < 64; i++) b->attacked[i%8][i/8] = 0;
+	b->white_king = (coord){4, 0};
+	b->black_king = (coord){4, 7};
 }
 
 bool move_arr_contains(move *moves, move move, int arrlen) {

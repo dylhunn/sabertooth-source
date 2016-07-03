@@ -72,7 +72,7 @@ int negamax(board *b, int alpha, int beta, int ply) {
 		}
 	}
 
-	if (ply == 0) { 
+	if (ply <= 0) { 
 		return negaquiesce(b, alpha, beta, ply);
 		/*int score = evaluate(b);
 		if (b->black_to_move) score = -score;
@@ -84,7 +84,10 @@ int negamax(board *b, int alpha, int beta, int ply) {
 	int num_children = 0;
 	move chosen_move = no_move;
 	move *moves = board_moves(b, &num_children);
-	assert(num_children > 0);
+	/*if (num_children == 0) {
+		//printf("Found a stalemate in the game tree at ply %d.\n", ply);
+		return 0;
+	}*/
 
 	// start with the move from the transposition table
 	if (stored != NULL) {
@@ -98,10 +101,22 @@ int negamax(board *b, int alpha, int beta, int ply) {
 	int bestval = NEG_INFINITY;
 	move bestmove = no_move;
 
+	int num_moves_checked = 0;
+
 	for (int i = num_children - 1; i >= 0; i--) {
 		//uint64_t old_hash = b->hash; // for debugging
 		apply(b, moves[i]);
+
+		// never move into check
+		coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
+		bool nonviable = in_check(b, king_loc.col, king_loc.row, !(b->black_to_move));
+		if (nonviable) {
+			unapply(b, moves[i]);
+			continue;
+		}
+
 		int score = -negamax(b, -beta, -alpha, ply - 1);
+		num_moves_checked++;
 		unapply(b, moves[i]);
 		//assert (old_hash == b->hash);
 
@@ -113,9 +128,18 @@ int negamax(board *b, int alpha, int beta, int ply) {
 		alpha = max(alpha, score);
 		if (alpha >= beta) break; // TODO if bestval >= beta ??
 
-
 	}
 	free(moves);
+
+	if (num_moves_checked == 0) {
+		coord king_loc = b->black_to_move ? b->black_king : b->white_king;
+		bool king_in_check = in_check(b, king_loc.col, king_loc.row, b->black_to_move);
+		if (king_in_check) { // checkmated!
+			return NEG_INFINITY;
+		} else { // stalemate
+			return 0;
+		}
+	}
 
 	evaltype restype;
     if (bestval <= alpha_orig) restype = upperbound; 
@@ -151,13 +175,16 @@ int negaquiesce(board *b, int alpha, int beta, int ply) {
 	}
 
 	// search cutoffs
-	if (stand_pat >= beta) return stand_pat; // TODO return beta?
+	if (stand_pat >= beta) return stand_pat;
 	if (alpha < stand_pat) alpha = stand_pat;
 
 	int num_children = 0;
 	move chosen_move = no_move;
 	move *moves = board_moves(b, &num_children);
-	assert(num_children > 0);
+	/*if (num_children == 0) {
+		//printf("Found a stalemate in the game tree at ply %d.\n", ply);
+		return 0;
+	}*/
 
 	// start with the move from the transposition table
 	if (stored != NULL) {
@@ -174,11 +201,30 @@ int negaquiesce(board *b, int alpha, int beta, int ply) {
 	int bestval = NEG_INFINITY;
 	move bestmove = no_move;
 
+	coord king_square = b->black_to_move ? b->black_king : b->white_king;
+
+	int num_moves_checked = 0;
+
 	for (int i = num_children - 1; i >= 0; i--) {
-		if (p_eq(moves[i].captured, no_piece)) continue;
 		//uint64_t old_hash = b->hash; // for debugging
 		apply(b, moves[i]);
+
+		// never move into check
+		coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
+		bool nonviable = in_check(b, king_loc.col, king_loc.row, !(b->black_to_move));
+		if (nonviable) {
+			unapply(b, moves[i]);
+			continue;
+		}
+
+		// Skip if the move is a non-capture and we are not in check
+		if (p_eq(moves[i].captured, no_piece) /*&& !in_check(b, king_square.col, king_square.row, b->black_to_move)*/) {
+			unapply(b, moves[i]);
+			continue;
+		}
+
 		int score = -negaquiesce(b, -beta, -alpha, ply - 1);
+		num_moves_checked++;
 		unapply(b, moves[i]);
 		//assert (old_hash == b->hash);
 
@@ -191,6 +237,12 @@ int negaquiesce(board *b, int alpha, int beta, int ply) {
 		if (alpha >= beta) break; // TODO if bestval >= beta ??
 	}
 	free(moves);
+
+	// This might not be stalemate or checkmate because we didn't try every move
+	// Just use the static evaluation
+	if (num_moves_checked == 0) {
+		return stand_pat;
+	}
 
 	evaltype restype;
     if (bestval <= alpha_orig) restype = qupperbound; 
@@ -364,6 +416,11 @@ void apply(board *b, move m) {
 		}
 	}
 
+	if (moved_piece.type == 'K') {
+		if (moved_piece.white) b->white_king = m.to;
+		else b->black_king = m.to;
+	}
+
 	// Moves involving rook squares always strip castling rights
 	if ((c_eq(m.from, wqr) || c_eq(m.to, wqr)) && b->castle_rights_wq) {
 		b->castle_rights_wq = false;
@@ -400,6 +457,11 @@ void unapply(board *b, move m) {
 	b->hash ^= zobrist_black_to_move;
 	b->black_to_move = !b->black_to_move;
 	b->last_move_ply--;
+
+	if (old_piece.type == 'K') {
+		if (old_piece.white) b->white_king = m.from;
+		else b->black_king = m.from;
+	}
 	
 	// Manually move rook for castling
 	if (m.c != N) { // Manually move rook

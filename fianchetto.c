@@ -3,6 +3,9 @@
  *   - board_moves
  *   - evaluate_material
  * - Separate move generator for quiescence
+ * - Multithreading
+ * - Killer moves
+ * - Null moves
  *
  * Other TODO items:
  * - Identify game-ending conditions
@@ -70,6 +73,7 @@ int repl(void) {
 					printf("Read move: %s\n", move_to_string(m, buffer));
 					b.true_game_ply_clock++;
 					apply(&b, m);
+					//tt_clear(); // for debugging
 				}
 				printf("\n");
 				break;
@@ -137,13 +141,14 @@ void print_analysis(board *b_orig) {
 		assert(!m_eq(eval->best, no_move));
 		if (!b->black_to_move) printf("%d.", moveno++);
 		char move[6];
-		if (eval->type == qexact) printf("(q) ");
+		if (eval->type == qexact || eval->type == qupperbound || eval->type == qlowerbound) printf("(q)");
 		printf("%s ", move_to_string(eval->best, move));
 		apply(b, eval->best);
 		eval = tt_get(b);
 	} while (eval != NULL && /*!m_eq(eval->best, no_move) &&*/ curr_depth-- > 0);
-	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms)", 
-		sstats.nodes_searched, sstats.qnodes_searched, sstats.qnode_aborts, sstats.time);
+	double rate = ((double) sstats.nodes_searched + sstats.qnodes_searched) / sstats.time;
+	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms), %.0fkN/s", 
+		sstats.nodes_searched, sstats.qnodes_searched, sstats.qnode_aborts, sstats.time, rate);
 	printf("\n");
 }
 
@@ -153,6 +158,7 @@ void iterative_deepen(board *b, int max_depth) {
 		clear_stats();
 		printf("Searching at depth %d... ", i);
 		fflush(stdout);
+		//tt_clear();
 		search(b, i);
 		print_analysis(b);
 	}

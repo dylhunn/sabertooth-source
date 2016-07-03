@@ -130,22 +130,34 @@ int castle_moves(board *b, coord c, move *list) {
 	int added = 0;
 	uint8_t row = at(b, c).white ? 0 : 7;
 	bool isWhite = at(b, c).white;
-	if (in_check(c.col, c.row)) return 0;
+	if (in_check(b, c.col, c.row, b->black_to_move)) return 0;
 	bool k_r_path_clear = true;
 	bool q_r_path_clear = true;
-	for (int i = 5; i <= 6; i++) if (!p_eq(b->b[i][row], no_piece) || in_check(i, row)) {k_r_path_clear = false; break;};
-	for (int i = 3; i >= 1; i--) if (!p_eq(b->b[i][row], no_piece) || in_check(i, row)) {q_r_path_clear = false; break;};
+	for (int i = 5; i <= 6; i++) {
+		if (!p_eq(b->b[i][row], no_piece) || in_check(b, i, row, b->black_to_move)) {
+			k_r_path_clear = false;
+			break;
+		}
+	}
+	for (int i = 3; i >= 1; i--) {
+		if (!p_eq(b->b[i][row], no_piece) || in_check(b, i, row, b->black_to_move)) {
+			q_r_path_clear = false;
+			break;
+		}
+	}
 	if (k_r_path_clear) {
 		if (isWhite && b->castle_rights_wk) {
 			if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K}, list + added)) added++;
-		} else if (!isWhite && b->castle_rights_bk) 
+		} else if (!isWhite && b->castle_rights_bk) {
 			if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K}, list + added)) added++;
+		}
 	}
 	if (q_r_path_clear) {
 		if (isWhite && b->castle_rights_wq) {
 			if (add_move(b, (move){c, (coord){1, row}, no_piece, no_piece, Q}, list + added)) added++;
-		} else if (!isWhite && b->castle_rights_bq) 
+		} else if (!isWhite && b->castle_rights_bq) {
 			if (add_move(b, (move){c, (coord){1, row}, no_piece, no_piece, Q}, list + added)) added++;
+		}
 	}
 	return added;
 }
@@ -166,11 +178,12 @@ int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps) {
 	return added;
 }
 
-// Adds a move at the front of the list if it doesn't put the king in check
+// Adds a move at the front of the list if it's pseudolegal
 bool add_move(board *b, move m, move *list) {
-	list[0] = m; return true; // todo
+	list[0] = m; return true;
 	/*apply(b, m);
-	bool viable = in_check(king_loc);
+	coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
+	bool viable = !in_check(b, king_loc.col, king_loc.row, !(b->black_to_move));
 	if (viable) list[0] = m;
 	unapply(b, m);
 	return viable;*/
@@ -237,10 +250,80 @@ bool string_to_move(board *b, char *str, move *m) {
 	free(moves);
 
 	return true;
-	fail: return false;;
+	fail: return false;
 }
 
 // checks if a given coordinate would be in check on the current board
-bool in_check(int col, int row) {
-	return false; // todo
+// not efficient when looping over the board
+bool in_check(board *b, int col, int row, bool by_white) {
+	// sliders and king
+	for (int dc = -1; dc <= 1; dc++) {
+		for (int dr = -1; dr <= 1; dr++) {
+			if (dc == 0 && dr == 0) continue;
+			piece found = no_piece;
+			int num_steps = 0;
+			int ii = col + dc;
+			for (int j = row + dr; in_bounds((coord){ii, j}); j += dr) {
+				num_steps++;
+				found = at(b, (coord){ii, j});
+				if (!p_eq(found, no_piece)) break; // find the first piece in the way
+				ii += dc;
+			}
+			if (p_eq(found, no_piece)) continue;
+			if (found.white != by_white) continue;
+			switch(found.type) {
+				case 'P':
+					continue;
+				case 'N':
+					continue;
+				case 'B':
+					if (dc != 0 && dr != 0) return true;
+					continue;
+				case 'R':
+					if (dc == 0 || dr == 0) return true;
+					continue;
+				case 'Q':
+					return true;
+				case 'K':
+					if (num_steps == 1) return true;
+					continue;
+				default: assert(false);
+			}
+		}
+	}
+
+	// knights
+	for (int d1 = -1; d1 <= 1; d1 += 2) {
+		for (int d2 = -2; d2 <= 2; d2 += 4) {
+			int dc = d1;
+			int dr = d2;
+			for (int i = 0; i < 2; i++) {
+				int temp = dc;
+				dc = dr;
+				dr = temp;
+				coord target = (coord){dc + col, dr + row};
+				if (!(in_bounds(target))) continue;
+				piece found =  at(b, target);
+				if (p_eq(found, no_piece)) continue;
+				if (found.white != by_white) continue;
+				if (found.type != 'N') continue;
+				return true;
+			}
+			
+		}
+	}
+
+	// pawns
+	int dr = by_white ? -1 : 1;
+	for (int dc = -1; dc <= 1; dc += 2) {
+		coord target = (coord){dc + col, dr + row};
+		if (!(in_bounds(target))) continue;
+		piece found = at(b, target);
+		if (p_eq(found, no_piece)) continue;
+		if (found.white != by_white) continue;
+		if (found.type != 'P') continue;
+		return true;
+	}
+
+	return false;
 }

@@ -110,9 +110,11 @@ void tt_put(board *b, evaluation e) {
 	if (tt_keys[idx] == 0) tt_count++;
 	// Never replace exact with inexact, or we could easily lose the PV.
 	if (tt_values[idx].type == exact && e.type != exact) return;
+	if (tt_values[idx].type == qexact && e.type != qexact) return;
 	// Always replace inexact with exact;
 	// otherwise, we might fail to replace a cutoff with a "shallow" ending of a PV.
 	if (tt_values[idx].type != exact && e.type == exact) goto skipchecks;
+	if (tt_values[idx].type != qexact && e.type == qexact) goto skipchecks;
 	// Otherwise, prefer deeper entries; replace if equally deep due to aspiration windows
 	if (e.depth < tt_values[idx].depth) return;
 	skipchecks:
