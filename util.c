@@ -5,6 +5,7 @@ const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE, N};
 
 const char *engine_name = "Fianchetto";
 const char *engine_version = "0.1a";
+const char *author_name = "Dylan D. Hunn";
 
 bool p_eq(piece a, piece b) {
 	return a.type == b.type && a.white == b.white;
@@ -85,4 +86,16 @@ int min(int a, int b) {
 
 int max(int a, int b) {
 	return a > b ? a : b;
+}
+
+void stdout_fprintf(FILE * f, const char * fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fflush(stdout);
+    fflush(f);
 }

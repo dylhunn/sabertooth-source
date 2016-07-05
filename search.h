@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -31,8 +32,10 @@ extern searchstats sstats;
 
 void clear_stats(void);
 
+// Computes how much time should be used to search the next move, all units in ms
+int time_use(board *b, int time_left, int increment, int movestogo);
 int search(board *b, int ply);
-int negamax(board *b, int alpha, int beta, int ply);
+int negamax(board *b, int alpha, int beta, int ply, bool actual_white_turn);
 void apply(board *b, move m);
 void unapply(board *b, move m);
 

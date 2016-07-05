@@ -16,6 +16,8 @@ static uint64_t tt_size;
 static uint64_t tt_count = 0;
 static uint64_t tt_rehash_count; // computed based on max_load
 
+extern pthread_mutex_t tt_writing_lock = PTHREAD_MUTEX_INITIALIZER;
+
 static inline int square_code(coord c) {
 	return (c.col)*8+c.row;
 }
@@ -29,6 +31,7 @@ static inline uint64_t tt_index(board *b) {
 // Invoke to prepare transposition table
 void tt_init(void) {
 	// first, compute size from memory use
+	pthread_mutex_lock(&tt_writing_lock);
 	const uint64_t bytes_in_mb = 1000000;
 	tt_size = (TT_MEGABYTES * bytes_in_mb) / (sizeof(evaluation) + sizeof(uint8_t));
 
@@ -55,14 +58,15 @@ void tt_init(void) {
 	zobrist_black_to_move = rand64();
 	atexit(tt_auto_cleanup);
 	is_initialized = true;
+	pthread_mutex_unlock(&tt_writing_lock);
 }
 
 // Automatically called
 void tt_auto_cleanup(void) {
-	if (tt_keys) free(tt_keys);
+	/*if (tt_keys) free(tt_keys);
 	tt_keys = NULL;
 	if (tt_values) free(tt_values);
-	tt_values = NULL;
+	tt_values = NULL;*/
 }
 
 uint64_t tt_hash_position(board *b) {
@@ -83,16 +87,19 @@ uint64_t tt_hash_position(board *b) {
 
 // TODO - permit storing both upper and lower bounds in an inexact node
 void tt_put(board *b, evaluation e) {
+	pthread_mutex_lock(&tt_writing_lock);
 	assert(is_initialized);
 	if (tt_count >= tt_rehash_count) {
 		if (allow_tt_expansion && !tt_expand()) {
 			printf("ERROR: Failed to expand transposition table from %llu entries; clearing.\n", tt_count);
 			tt_clear();
+			pthread_mutex_unlock(&tt_writing_lock);
 			return;
 		}
 		if (!allow_tt_expansion) {
 			printf("Transposition table filled; clearing.\n");
 			tt_clear();
+			pthread_mutex_unlock(&tt_writing_lock);
 			return;
 		}
 	}
@@ -109,18 +116,29 @@ void tt_put(board *b, evaluation e) {
 
 	if (tt_keys[idx] == 0) tt_count++;
 	// Never replace exact with inexact, or we could easily lose the PV.
-	if (tt_values[idx].type == exact && e.type != exact) return;
-	if (tt_values[idx].type == qexact && e.type != qexact) return;
+	if (tt_values[idx].type == exact && e.type != exact) {
+		pthread_mutex_unlock(&tt_writing_lock);
+		return;
+	}
+	if (tt_values[idx].type == qexact && e.type != qexact) {
+		pthread_mutex_unlock(&tt_writing_lock);
+		return;
+	}
 	// Always replace inexact with exact;
 	// otherwise, we might fail to replace a cutoff with a "shallow" ending of a PV.
 	if (tt_values[idx].type != exact && e.type == exact) goto skipchecks;
 	if (tt_values[idx].type != qexact && e.type == qexact) goto skipchecks;
+	if (tt_values[idx].type != qexact && e.type == exact) goto skipchecks;
 	// Otherwise, prefer deeper entries; replace if equally deep due to aspiration windows
-	if (e.depth < tt_values[idx].depth) return;
+	if (e.depth < tt_values[idx].depth) {
+		pthread_mutex_unlock(&tt_writing_lock);
+		return;
+	}
 	skipchecks:
 	tt_keys[idx] = b->hash;
 	e.last_access_move = b->true_game_ply_clock;
 	tt_values[idx] = e;
+	pthread_mutex_unlock(&tt_writing_lock);
 }
 
 // Returns NULL if entry is not found.
@@ -139,6 +157,7 @@ void tt_clear() {
 }
 
 bool tt_expand(void) {
+	pthread_mutex_lock(&tt_writing_lock);
 	assert(is_initialized);
 	printf("Expanding transposition table...\n");
 	uint64_t new_size = tt_size * 2;
@@ -158,6 +177,7 @@ bool tt_expand(void) {
 	tt_values = new_values;
 	tt_size = new_size;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * new_size));
+	pthread_mutex_unlock(&tt_writing_lock);
 	return true;
 }
 

@@ -1,0 +1,85 @@
+Starting log
+Received command: uci
+
+id name Fianchetto 0.1a
+id author Dylan D. Hunn
+info string loading Fianchetto0.1a
+uciok
+Received command: isready
+
+readyok
+Received command: ucinewgame
+
+Received command: isready
+
+readyok
+Received command: ucinewgame
+
+Received command: isready
+
+readyok
+Received command: ucinewgame
+
+Received command: isready
+
+readyok
+Received command: ucinewgame
+
+Received command: position startpos
+
+Received command: go wtime 360000 btime 360000 movestogo 40
+
+info depth 2 time 0 nodes 23 score cp 0
+info pv b1a3 g8h6 
+info depth 4 time 11 nodes 871 score cp -5
+info pv e2e3 b7b6 d2d4 c8b7 
+info depth 6 time 1100 nodes 84012 score cp -80
+info pv e2e4 e7e6 f1c4 d8f6 c4b3 f6b2 
+bestmove e2e4
+Received command: position startpos moves e2e4 g8f6
+
+Received command: go wtime 351000 btime 343920 movestogo 39
+
+info depth 2 time 0 nodes 7 score cp -67
+info pv e4e5 f6e4 f1c4 e4d2 
+info depth 4 time 0 nodes 4 score cp -67
+info pv e4e5 f6e4 f1c4 e4d2 
+info depth 6 time 117 nodes 18627 score cp -3
+info pv b1a3 b8c6 f1d3 h8g8 g1e2 g8h8 
+bestmove b1a3
+Received command: position startpos moves e2e4 g8f6 b1a3 f6e4
+
+Received command: go wtime 342000 btime 331680 movestogo 38
+
+info depth 2 time 2 nodes 188 score cp -197
+info pv f1c4 h8g8 d1f3 e7e6 f3e4 f8a3 
+info depth 4 time 21 nodes 2218 score cp -135
+info pv a1b1 h8g8 f1d3 g8h8 
+info depth 6 time 335 nodes 34405 score cp -120
+info pv d1f3 d7d5 f1c4 h8g8 d2d4 g8h8 
+bestmove d1f3
+Received command: position startpos moves e2e4 g8f6 b1a3 f6e4 d1f3 e4f6
+
+Received command: go wtime 332980 btime 321360 movestogo 37
+
+info depth 2 time 0 nodes 44 score cp -120
+info pv f1d3 h8g8 
+info depth 4 time 31 nodes 3799 score cp -130
+info pv a3c4 d7d6 d2d4 c8f5 
+Received command: stop
+
+bestmove a3c4
+Received command: position startpos moves e2e4 g8f6 b1a3 f6e4 d1f3 e4f6
+
+Received command: go infinite
+
+info string infinite search...
+info depth 2 time 0 nodes 9 score cp -130
+info pv a3c4 d7d6 c4e3 f6g8 f3f4 c8f5 
+info depth 4 time 0 nodes 58 score cp -130
+info pv e1d1 h8g8 d1e1 g8h8 
+info depth 6 time 2282 nodes 218376 score cp -163
+info pv b2b3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 f6e4 f3f5 e4f6 f5f3 
+Received command: stop
+
+bestmove b2b3

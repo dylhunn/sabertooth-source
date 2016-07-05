@@ -139,7 +139,7 @@ int castle_moves(board *b, coord c, move *list) {
 			break;
 		}
 	}
-	for (int i = 3; i >= 1; i--) {
+	for (int i = 3; i >= 2; i--) {
 		if (!p_eq(b->b[i][row], no_piece) || in_check(b, i, row, b->black_to_move)) {
 			q_r_path_clear = false;
 			break;
@@ -154,9 +154,9 @@ int castle_moves(board *b, coord c, move *list) {
 	}
 	if (q_r_path_clear) {
 		if (isWhite && b->castle_rights_wq) {
-			if (add_move(b, (move){c, (coord){1, row}, no_piece, no_piece, Q}, list + added)) added++;
+			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added)) added++;
 		} else if (!isWhite && b->castle_rights_bq) {
-			if (add_move(b, (move){c, (coord){1, row}, no_piece, no_piece, Q}, list + added)) added++;
+			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added)) added++;
 		}
 	}
 	return added;
@@ -209,10 +209,13 @@ char *move_to_string(move m, char str[6]) {
 bool string_to_move(board *b, char *str, move *m) {
 	m->from = (coord) {str[0] - 'a', str[1] - '1'};
 	m->to = (coord) {str[2] - 'a', str[3] - '1'};
-	if (!in_bounds(m->from)) goto fail;
-	if (!in_bounds(m->to)) goto fail;
+	if (!in_bounds(m->from)) return false;
+	if (!in_bounds(m->to)) return false;
 	m->captured = at(b, m->to);
 	switch(str[4]) {
+		case '\0':
+			m->promote_to = no_piece;
+			break;
 		case '\n':
 			m->promote_to = no_piece;
 			break;
@@ -229,28 +232,30 @@ bool string_to_move(board *b, char *str, move *m) {
 			m->promote_to = (piece){'B', at(b, m->from).white};
 			break;
 		default:
-			goto fail;
+			return false;
 	}
 
 	if (at(b, m->from).type == 'K') {
 		if (m->to.col == m->from.col + 2) m->c = K;
-		else if (m->to.col == m->from.col - 3) m->c = Q;
+		else if (m->to.col == m->from.col - 2) m->c = Q;
+		else m->c = N;
+	} else {
+		m->c = N;
 	}
-	else m->c = N;
 
 	bool found = false;
 	int nMoves;
 	move *moves;
 	moves = board_moves(b, &nMoves);
-	for (int i = 0; i < nMoves; i++)
-		if (m_eq(moves[i], *m)) found = true;
-	if (!found) {
-		goto fail;
+	for (int i = 0; i < nMoves; i++) {
+		if (m_eq(moves[i], *m)) {
+			found = true;
+			break;
+		}
 	}
 	free(moves);
 
-	return true;
-	fail: return false;
+	return found;
 }
 
 // checks if a given coordinate would be in check on the current board

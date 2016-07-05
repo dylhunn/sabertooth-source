@@ -9,6 +9,7 @@
  *
  * Other TODO items:
  * - Identify game-ending conditions
+ *   - Draw by repetition or 50 moves
  * - En passant
  * - No castling through check
  * - Search function should account for 50-move and repeated-move draws
@@ -37,7 +38,10 @@ void print_board(board *b);
 void print_analysis(board *b);
 void iterative_deepen(board *b, int max_depth);
 
-int main() {
+int main(int argc, char* argv[]) {
+	for (int i = 0; i < argc; i++) {
+		if(strcmp("-uci", argv[i]) == 0) enter_uci();
+	}
 	repl();
 	return 0;
 }
@@ -50,7 +54,7 @@ int repl(void) {
 	printf("%s %s by Dylan D. Hunn\nConsole Analysis Interface\n\n", engine_name, engine_version);
 	while (true) {
 		print_board(&b);
-		printf("Commands: \"e3\" evaluates to depth 3; \"ma1a2\" makes the move a1a2; \"q\" quits; \"u\" or \"uci\" enters UCI mode.\n\n");
+		printf("Commands: \"e3\" evaluates to depth 3; \"ma1a2\" makes the move a1a2; \"q\" quits.\n\n");
 		char buffer[100];
 		fgets(buffer, 99, stdin);
 		int edepth = buffer[1] - '0';
@@ -79,8 +83,6 @@ int repl(void) {
 				break;
 			case 'q':
 				exit(0);
-			case 'u':
-				enter_uci();
 			default:
 				system("clear");
 				printf("Unrecognized command.\n\n");

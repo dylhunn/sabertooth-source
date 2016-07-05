@@ -4,7 +4,7 @@
 searchstats sstats;
 
 int mtd_f(board *b, int ply);
-int negaquiesce(board *b, int alpha, int beta, int ply);
+int negaquiesce(board *b, int alpha, int beta, int ply, bool actual_white_turn);
 int capture_move_comparator(const board *board, const move *a, const move *b);
 
 void clear_stats() {
@@ -15,16 +15,23 @@ void clear_stats() {
 	sstats.qnode_aborts = 0;
 }
 
+// Some parameters might be -1 if they do not apply
+int time_use(board *b, int time_left, int increment, int movestogo) {
+	if (time_left < 5000) return time_left / 10; // always freak out if we are almost out of time
+	// Assume the game is 45 moves long, but never use more than 1/5th of the remaining time
+	int moves_left_guess = (movestogo == -1) ? max(5, 45 - b->last_move_ply) : movestogo;
+	return time_left / moves_left_guess;
+}
+
 int search(board *b, int ply) {
 	clear_stats();
 	sstats.depth = ply;
 	struct timeval t1, t2;
     // start timer
     gettimeofday(&t1, NULL);
-	int result;
-	/*if (b->black_to_move) result = -negamax(b, POS_INFINITY, NEG_INFINITY, ply);
-	else result = negamax(b, NEG_INFINITY, POS_INFINITY, ply);*/
-	result = mtd_f(b, ply);
+	int result = mtd_f(b, ply);
+	//int result = negamax(b, NEG_INFINITY, POS_INFINITY, ply, !b->black_to_move);
+	//if (b->black_to_move) result = -result;
 
 	gettimeofday(&t2, NULL);
     // compute and print the elapsed time in millisec
@@ -38,22 +45,25 @@ int mtd_f(board *board, int ply) {
 	int g; // first guess of evaluation
 	evaluation *stored = tt_get(board); // Use last pass in TT
 	if (stored != NULL) g = stored->score; // If not present, use static eval guess
-	else g = evaluate(board);
+	else {
+		g = evaluate(board);
+		if (board->black_to_move) g = -g;
+	}
 	int upper_bound = POS_INFINITY;
 	int lower_bound = NEG_INFINITY;
 	while (lower_bound < upper_bound) {
 		int beta;
 		if (g == lower_bound) beta = g+1;
 		else beta = g;
-		if (board->black_to_move) g = -negamax(board, -beta, -(beta-1), ply);
-		else g = negamax(board, beta-1, beta, ply);
+		g = negamax(board, beta-1, beta, ply, !board->black_to_move);
 		if (g < beta) upper_bound = g;
 		else lower_bound = g;
 	}
 	return g;
 }
 
-int negamax(board *b, int alpha, int beta, int ply) {
+int negamax(board *b, int alpha, int beta, int ply, bool actual_white_turn) {
+	pthread_testcancel(); // to allow thread termination
 	int alpha_orig = alpha;
 
 	evaluation *stored = tt_get(b);
@@ -73,10 +83,10 @@ int negamax(board *b, int alpha, int beta, int ply) {
 	}
 
 	if (ply <= 0) { 
-		return negaquiesce(b, alpha, beta, ply);
-		/*int score = evaluate(b);
-		if (b->black_to_move) score = -score;
-		return score;*/
+		//return negaquiesce(b, alpha, beta, ply, actual_white_turn);
+		int score = evaluate(b);
+		if (!actual_white_turn) score = -score;
+		return score;
 	}
 
 	sstats.nodes_searched++;
@@ -115,7 +125,7 @@ int negamax(board *b, int alpha, int beta, int ply) {
 			continue;
 		}
 
-		int score = -negamax(b, -beta, -alpha, ply - 1);
+		int score = -negamax(b, -beta, -alpha, ply - 1, actual_white_turn);
 		num_moves_checked++;
 		unapply(b, moves[i]);
 		//assert (old_hash == b->hash);
@@ -149,7 +159,7 @@ int negamax(board *b, int alpha, int beta, int ply) {
 	return bestval;
 }
 
-int negaquiesce(board *b, int alpha, int beta, int ply) {
+int negaquiesce(board *b, int alpha, int beta, int ply, bool actual_white_turn) {
 	int alpha_orig = alpha;
 
 	evaluation *stored = tt_get(b);
@@ -167,7 +177,7 @@ int negaquiesce(board *b, int alpha, int beta, int ply) {
 	sstats.qnodes_searched++;
 
 	int stand_pat = evaluate(b);
-	if (b->black_to_move) stand_pat = -stand_pat; // TODO should this be negated?
+	if (!actual_white_turn) stand_pat = -stand_pat;
 
 	if (ply < -quiesce_ply_cutoff) { 
 		sstats.qnode_aborts++;
@@ -175,8 +185,8 @@ int negaquiesce(board *b, int alpha, int beta, int ply) {
 	}
 
 	// search cutoffs
-	if (stand_pat >= beta) return stand_pat;
-	if (alpha < stand_pat) alpha = stand_pat;
+	if (stand_pat > alpha) alpha = stand_pat;
+	if (alpha >= beta) return stand_pat;
 
 	int num_children = 0;
 	move chosen_move = no_move;
@@ -223,7 +233,7 @@ int negaquiesce(board *b, int alpha, int beta, int ply) {
 			continue;
 		}
 
-		int score = -negaquiesce(b, -beta, -alpha, ply - 1);
+		int score = -negaquiesce(b, -beta, -alpha, ply - 1, actual_white_turn);
 		num_moves_checked++;
 		unapply(b, moves[i]);
 		//assert (old_hash == b->hash);
@@ -255,64 +265,6 @@ int negaquiesce(board *b, int alpha, int beta, int ply) {
     }
 	return bestval;
 }
-
-/*int quiesce(board *b, int alpha, int beta, int ply) {
-	evaluation *stored = tt_get(b);
-	// Any non-quiescence node would have continued through the quiescence search.
-	// Any shallower quiescence node will have a later abort point. (TODO: can we remove the depth check?)
-	if (stored != NULL) assert(!m_eq(stored->best, no_move));
-	if (stored != NULL && stored->depth >= ply) { 
-		if (stored->type == at_least) {
-			if (stored->score >= beta) return beta;
-		} else if (stored->type == at_most) {
-			//if (stored->score <= alpha) return alpha;
-		} else { // exact
-			if (stored->score >= beta) return beta; // respect fail-hard cutoff
-			if (stored->score < alpha) return alpha; // alpha cutoff
-			return stored->score;
-		}
-	}
-
-	sstats.qnodes_searched++;
-
-	int stand_pat = evaluate(b);
-	if (b->black_to_move) stand_pat = -stand_pat; // always from perspective of player
-	if (stand_pat >= beta) return beta;
-	if (alpha < stand_pat) alpha = stand_pat;
-	if (ply < -quiesce_ply_cutoff) {
-		sstats.qnode_aborts++;
-		return stand_pat;
-	}
-
-	int num_children = 0;
-	move *moves = board_moves(b, &num_children);
-
-	// Sort exchanges using MVV-LVA
-	qsort_r(moves, num_children, sizeof(move), b, &capture_move_comparator);
-	move localbestmove = no_move;
-	int localbest = POS_INFINITY;
-	for (int i = 0; i < num_children; i++) {
-		if (p_eq(moves[i].captured, no_piece)) continue;
-		apply(b, moves[i]);
-		int child_score = -quiesce(b, -beta, -alpha, ply-1);
-		unapply(b, moves[i]);
-		if (child_score >= beta) {
-			tt_put(b, (evaluation){moves[i], child_score, at_least, ply, 0});
-			free(moves);
-			return beta;
-		}
-		if (child_score > localbest) {
-			localbest = child_score;
-			localbestmove = moves[i];
-			if (child_score > alpha) alpha = child_score;
-		}
-	}
-	if (!m_eq(no_move, localbestmove)) { // This should only fail for terminal nodes (with no captures)
-		tt_put(b, (evaluation){localbestmove, localbest, exact, ply, 0});
-	}
-	free(moves);
-	return alpha;
-}*/
 
 // An array sorting comparator for capture moves, for use with qsort_r.
 // Sorts by MVV/LVA (Most Valuable Victim/Least Valuable Attacker) in REVERSE order.
@@ -384,7 +336,7 @@ void apply(board *b, move m) {
 	// Manually move rook for castling
 	if (m.c != N) { // Manually move rook
 		uint8_t rook_from_col = ((m.c == K) ? 7 : 0);
-		uint8_t rook_to_col = ((m.c == K) ? 5 : 2);
+		uint8_t rook_to_col = ((m.c == K) ? 5 : 3);
 		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.from.row});
 		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.to).white}; // !!
 		b->b[rook_from_col][m.from.row] = no_piece;
@@ -466,7 +418,7 @@ void unapply(board *b, move m) {
 	// Manually move rook for castling
 	if (m.c != N) { // Manually move rook
 		uint8_t rook_to_col = ((m.c == K) ? 7 : 0);
-		uint8_t rook_from_col = ((m.c == K) ? 5 : 2);
+		uint8_t rook_from_col = ((m.c == K) ? 5 : 3);
 		b->hash ^= tt_pieceval(b, (coord){rook_from_col, m.from.row});
 		b->b[rook_to_col][m.to.row] = (piece){'R', at(b, m.from).white};
 		b->b[rook_from_col][m.from.row] = no_piece;

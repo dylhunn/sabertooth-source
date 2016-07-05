@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -46,6 +47,9 @@ uint64_t tt_pieceval(board *b, coord c);
 // starting size of table, and whether expansion is allowed
 #define TT_MEGABYTES 2000
 static bool allow_tt_expansion = false;
+
+// To control access
+extern pthread_mutex_t tt_writing_lock;
 
 // Re-hash at 70% load factor
 static const double tt_max_load = .7;

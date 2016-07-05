@@ -2,6 +2,8 @@
 #define UTIL_H
 
 #include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include "stdbool.h"
 #include "types.h"
 #include "ttable.h"
@@ -19,6 +21,7 @@ extern const move no_move;
 
 extern const char *engine_name;
 extern const char *engine_version;
+extern const char *author_name;
 
 bool p_eq(piece a, piece b);
 
@@ -41,6 +44,8 @@ bool move_arr_contains(move *moves, move move, int arrlen);
 int min(int a, int b);
 
 int max(int a, int b);
+
+void stdout_fprintf(FILE * f, const char * fmt, ...);
 
 #endif
 
