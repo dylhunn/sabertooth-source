@@ -22,10 +22,17 @@ static inline int square_code(coord c) {
 	return (c.col)*8+c.row;
 }
 
-static inline uint64_t tt_index(board *b) {
-	uint64_t idx = b->hash % tt_size;
-	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) idx = (idx + 1) % tt_size;
-	return idx;
+double tt_load() {
+	assert(is_initialized);
+	return 100 * ((double) tt_count) / tt_size;
+}
+
+uint64_t get_tt_count() {
+	return tt_count;
+}
+
+uint64_t get_tt_size() {
+	return tt_size;
 }
 
 // Invoke to prepare transposition table
@@ -33,7 +40,9 @@ void tt_init(void) {
 	// first, compute size from memory use
 	pthread_mutex_lock(&tt_writing_lock);
 	const uint64_t bytes_in_mb = 1000000;
-	tt_size = (TT_MEGABYTES * bytes_in_mb) / (sizeof(evaluation) + sizeof(uint8_t));
+	tt_size = ceil(((double) (TT_MEGABYTES * bytes_in_mb)) / (sizeof(evaluation) + sizeof(uint64_t)));
+	uint64_t check_mb_size = ((double) tt_size * (sizeof(evaluation) + sizeof(uint64_t))) / bytes_in_mb;
+	printf("info string initializing ttable with %llu slots for total size %llumb\n", tt_size, check_mb_size);
 
 	if (tt_keys != NULL) free(tt_keys);
 	if (tt_values != NULL) free(tt_values);
@@ -104,28 +113,29 @@ void tt_put(board *b, evaluation e) {
 		}
 	}
 
+	bool overwriting = false;
 	uint64_t idx = b->hash % tt_size;
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
 		if (b->true_game_ply_clock - tt_values[idx].last_access_move >= remove_at_age) {
-			tt_count--;
-			tt_keys[idx] = 0;
+			overwriting = true;
 			break;
 		}
 		idx = (idx + 1) % tt_size;
 	}
 
-	if (tt_keys[idx] == 0) tt_count++;
-
 	// Never replace exact with inexact, or we could easily lose the PV.
 	if (tt_values[idx].type == exact && e.type != exact) {
+		sstats.ttable_insert_failures++;
 		pthread_mutex_unlock(&tt_writing_lock);
 		return;
 	}
 	if (tt_values[idx].type == qexact && e.type != qexact) {
+		sstats.ttable_insert_failures++;
 		pthread_mutex_unlock(&tt_writing_lock);
 		return;
 	}
 	if (tt_values[idx].type == qexact && e.type != exact) {
+		sstats.ttable_insert_failures++;
 		pthread_mutex_unlock(&tt_writing_lock);
 		return;
 	}
@@ -136,6 +146,7 @@ void tt_put(board *b, evaluation e) {
 	if (tt_values[idx].type != qexact && e.type == exact) goto skipchecks;
 	// Otherwise, prefer deeper entries; replace if equally deep due to aspiration windows
 	if (e.depth < tt_values[idx].depth) {
+		//sstats.ttable_insert_failures++;
 		pthread_mutex_unlock(&tt_writing_lock);
 		return;
 	}
@@ -143,15 +154,26 @@ void tt_put(board *b, evaluation e) {
 	tt_keys[idx] = b->hash;
 	e.last_access_move = b->true_game_ply_clock;
 	tt_values[idx] = e;
+	if (!overwriting) tt_count++;
+	else sstats.ttable_overwrites++;
+	sstats.ttable_inserts++;
+
 	pthread_mutex_unlock(&tt_writing_lock);
 }
 
 // Returns NULL if entry is not found.
 evaluation *tt_get(board *b) {
 	assert(is_initialized);
-	uint64_t idx = tt_index(b);
-	if (tt_keys[idx] == 0) return NULL;
+	uint64_t idx = b->hash % tt_size;
+	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
+		idx = (idx + 1) % tt_size;
+	}
+	if (tt_keys[idx] == 0) {
+		sstats.ttable_misses++;
+		return NULL;
+	}
 	tt_values[idx].last_access_move = b->true_game_ply_clock;
+	sstats.ttable_hits++;
 	return tt_values + idx;
 }
 
@@ -192,12 +214,14 @@ uint64_t tt_pieceval(board *b, coord c) {
 	piece p = at(b, c);
 	if (p_eq(p, no_piece)) return 0;
 	if (!p.white) piece_code += 6;
-	if (p.type == 'P') ; // do nothing
-	else if (p.type == 'N') piece_code += 1;
-	else if (p.type == 'B') piece_code += 2;
-	else if (p.type == 'R') piece_code += 3;
-	else if (p.type == 'Q') piece_code += 4;
-	else if (p.type == 'K') piece_code += 5;
-	else assert(false);
+	switch(p.type) {
+		case 'P': break; // do nothing
+		case 'N': piece_code += 1; break;
+		case 'B': piece_code += 2; break;
+		case 'R': piece_code += 3; break;
+		case 'Q': piece_code += 4; break;
+		case 'K': piece_code += 5; break;
+		default: assert(false);
+	}
 	return zobrist[square_code(c)][piece_code];
 }

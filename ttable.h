@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "search.h"
 #include "types.h"
 #include "util.h"
 
@@ -18,6 +19,13 @@
  *
  * The Transposition Table is a hashtable that stores previously evaluated positions.
  */
+
+// Fetch usage data about the table
+uint64_t get_tt_count(void);
+uint64_t get_tt_size(void);
+
+// Return the percentage of the table that is used
+double tt_load(void);
 
 // Initialize the transposition table. Must be called before use.
 void tt_init(void);
@@ -45,7 +53,7 @@ uint64_t tt_pieceval(board *b, coord c);
  */
 
 // starting size of table, and whether expansion is allowed
-#define TT_MEGABYTES 2000
+#define TT_MEGABYTES 250
 static bool allow_tt_expansion = false;
 
 // To control access
@@ -55,7 +63,7 @@ extern pthread_mutex_t tt_writing_lock;
 static const double tt_max_load = .7;
 
 // Nodes that haven't been accessed in this many moves are ancient and might be removed
-static const int remove_at_age = 4;
+static const int remove_at_age = 1; // TODO dynamically select? Also consider 2.
 
 static bool is_initialized = false;
 

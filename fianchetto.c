@@ -157,8 +157,11 @@ void print_analysis(board *b_orig) {
 		eval = tt_get(b);
 	} while (eval != NULL && /*!m_eq(eval->best, no_move) &&*/ curr_depth-- > 0);
 	double rate = ((double) sstats.nodes_searched + sstats.qnodes_searched) / sstats.time;
-	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms), %.0fkN/s", 
+	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms %.0fkN/s)", 
 		sstats.nodes_searched, sstats.qnodes_searched, sstats.qnode_aborts, sstats.time, rate);
+	
+	printf("\n\t(ttable: %llu/%llu = %.2f%% load, %llu hits, %llu misses, %llu inserts (with %llu overwrites), %llu insert failures)", 
+		get_tt_count(), get_tt_size(), tt_load(), sstats.ttable_hits, sstats.ttable_misses, sstats.ttable_inserts, sstats.ttable_overwrites, sstats.ttable_insert_failures);
 	printf("\n");
 }
 

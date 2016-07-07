@@ -80,6 +80,11 @@ typedef struct searchstats {
 	uint64_t nodes_searched; // non-quiescence, non-TT nodes considered
 	uint64_t qnodes_searched;
 	uint64_t qnode_aborts; // quiescence search abandoned due to depth
+	uint64_t ttable_inserts;
+	uint64_t ttable_insert_failures;
+	uint64_t ttable_hits;
+	uint64_t ttable_misses;
+	uint64_t ttable_overwrites;
 } searchstats;
 
 #endif

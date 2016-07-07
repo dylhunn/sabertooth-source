@@ -13,6 +13,11 @@ void clear_stats() {
 	sstats.nodes_searched = 0;
 	sstats.qnodes_searched = 0;
 	sstats.qnode_aborts = 0;
+	sstats.ttable_inserts = 0;
+	sstats.ttable_insert_failures = 0;
+	sstats.ttable_hits = 0;
+	sstats.ttable_misses = 0;
+	sstats.ttable_overwrites = 0;
 }
 
 // Some parameters might be -1 if they do not apply
@@ -120,6 +125,7 @@ int negamax(board *b, int alpha, int beta, int ply, bool actual_white_turn) {
 		// never move into check
 		coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
 		bool nonviable = in_check(b, king_loc.col, king_loc.row, !(b->black_to_move));
+		//bool nonviable = puts_in_check(b, moves[i], b->black_to_move);
 		if (nonviable) {
 			unapply(b, moves[i]);
 			continue;
@@ -221,6 +227,7 @@ int negaquiesce(board *b, int alpha, int beta, int ply, bool actual_white_turn) 
 		// never move into check
 		coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
 		bool nonviable = in_check(b, king_loc.col, king_loc.row, !(b->black_to_move));
+		//bool nonviable = puts_in_check(b, moves[i], b->black_to_move);
 		if (nonviable) {
 			unapply(b, moves[i]);
 			continue;

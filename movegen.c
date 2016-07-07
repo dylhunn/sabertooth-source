@@ -6,6 +6,14 @@ int horizontal_moves(board *b, coord c, move *list, int steps, bool captures_onl
 int pawn_moves(board *b, coord c, move *list, bool captures_only);
 int castle_moves(board *b, coord c, move *list);
 int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps, bool captures_only);
+piece puts_in_check_radiate_helper(board *b, coord square, coord king_loc);
+
+// Adds a move at the front of the list if it's pseudolegal
+static inline bool add_move(board *b, move m, move *list, bool captures_only) {
+	if (captures_only && p_eq(m.captured, no_piece)) return false;
+	else list[0] = m;
+	return true;
+}
 
 static const char promo_p[] = {'Q', 'N', 'B', 'R'}; // promotion targets
 
@@ -15,7 +23,7 @@ static const char promo_p[] = {'Q', 'N', 'B', 'R'}; // promotion targets
 // TODO: Optimize to use hashsets of piece locations.
 move *board_moves(board *b, int *count, bool captures_only) {
 	bool white = !b->black_to_move;
-	move *moves = malloc(sizeof(move) * 200); // Up to 200 moves supported
+	move *moves = malloc(sizeof(move) * max_moves_in_list);
 	*count = 0;
 	for (uint8_t i = 0; i < 8; i++) { // col
 		for (uint8_t j = 0; j < 8; j++) { // row
@@ -24,7 +32,8 @@ move *board_moves(board *b, int *count, bool captures_only) {
 		}
 
 	}
-	moves = realloc(moves, sizeof(move) * ((*count) + 2)); // extra slots for working space
+	// TODO does 
+	//moves = realloc(moves, sizeof(move) * ((*count) + 1)); // extra slot for working space
 	return moves;
 }
 
@@ -33,13 +42,6 @@ bool is_legal_move(board *b, move m) {
 	int count = piece_moves(b, m.from, moves, false);
 	bool result = move_arr_contains(moves, m, count);
 	return result;
-}
-
-// Adds a move at the front of the list if it's pseudolegal
-bool add_move(board *b, move m, move *list, bool captures_only) {
-	if (captures_only && p_eq(m.captured, no_piece)) return false;
-	else list[0] = m;
-	return true;
 }
 
 // Writes all legal moves for a piece to an array starting at index 0; 
@@ -101,15 +103,15 @@ int horizontal_moves(board *b, coord c, move *list, int steps, bool captures_onl
 int pawn_moves(board *b, coord c, move *list, bool captures_only) {
 	assert(at(b, c).type == 'P');
 	int added = 0;
-	piece cp = at(b, c);
-	bool unmoved = (c.row == 1 && cp.white) || (c.row == 6 && !cp.white);
-	int8_t dy = cp.white ? 1 : -1;
+	piece curr_p = at(b, c);
+	bool unmoved = (c.row == 1 && curr_p.white) || (c.row == 6 && !curr_p.white);
+	int8_t dy = curr_p.white ? 1 : -1;
 	bool promote = (c.row + dy == 0 || c.row + dy == 7); // next move is promotion
 	if (p_eq(at(b, (coord){c.col, c.row + dy}), no_piece) && !captures_only) { // front is clear, and we may make non-capturing moves
 		if (promote) {
 			for (int i = 0; i < 4; i++)
 				if (add_move(b, (move){c, (coord){c.col, c.row + dy}, no_piece, 
-								(piece){promo_p[i], cp.white}, N}, list + added, captures_only)) added++;
+								(piece){promo_p[i], curr_p.white}, N}, list + added, captures_only)) added++;
 		} else {
 			if (add_move(b, (move){c, {c.col, c.row + dy}, no_piece, no_piece, N}, list + added, captures_only)) added++;
 			if (unmoved && p_eq(at(b, (coord){c.col, c.row + dy + dy}), no_piece)) // double move
@@ -117,14 +119,16 @@ int pawn_moves(board *b, coord c, move *list, bool captures_only) {
 							no_piece, no_piece, N}, list + added, captures_only)) added++;
 		}
 	}
+
 	for (int8_t dx = -1; dx <= 1; dx += 2) { // both capture directions
 		coord cap = {c.col + dx, c.row + dy};
+		if (!in_bounds(cap)) continue;
 		piece cap_p = at(b, cap);
-		if (!in_bounds(cap) || p_eq(cap_p, no_piece) || cap_p.white == cp.white) continue;
+		if (p_eq(cap_p, no_piece) || cap_p.white == curr_p.white) continue;
 		if (promote) {
 			for (int i = 0; i < 4; i++) { // promotion types
 				if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, cap_p, 
-								(piece){promo_p[i], cp.white}, N}, list + added, captures_only)) added++;
+								(piece){promo_p[i], curr_p.white}, N}, list + added, captures_only)) added++;
 			}
 		} else if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N}, list + added, captures_only)) added++;
 	}
@@ -177,11 +181,12 @@ int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps, b
 	for (uint8_t s = 1; s <= steps; s++) {
 		curr_c.col += dx;
 		curr_c.row += dy;
-		piece curr_p = at(b, curr_c);
-		if (!p_eq(curr_p, no_piece) && at(b, curr_c).white == at(b, orig_c).white) break; // blocked
 		if (!in_bounds(curr_c)) break; // left board bounds
+		piece curr_p = at(b, curr_c);
+		bool is_blocked = !p_eq(curr_p, no_piece);
+		if (is_blocked && (curr_p.white == at(b, orig_c).white)) break; // blocked
 		if (add_move(b, (move){orig_c, curr_c, curr_p, no_piece, N}, list + added, captures_only)) added++; // freely move
-		if (!p_eq(curr_p, no_piece)) break; // captured
+		if (is_blocked) break; // captured
 	}
 	return added;
 }
@@ -316,6 +321,7 @@ bool in_check(board *b, int col, int row, bool by_white) {
 	}
 
 	// pawns
+	// todo en passant check
 	int dr = by_white ? -1 : 1;
 	for (int dc = -1; dc <= 1; dc += 2) {
 		coord target = (coord){dc + col, dr + row};
@@ -328,4 +334,99 @@ bool in_check(board *b, int col, int row, bool by_white) {
 	}
 
 	return false;
+}
+
+// checks if a given move, ALREADY applied, has put the specified color's king in check
+// this is slightly more efficient than in_check
+// precondition: the specified King was NOT already in check
+bool puts_in_check(board *b, move m, bool white_king) {
+	coord king_loc = white_king ? b->white_king : b->black_king;
+
+	// We can't handle king moves any more efficiently
+	if (at(b, m.to).type == 'K') return in_check(b, king_loc.col, king_loc.row, !white_king);
+
+	piece moved_p = at(b, m.to);
+	bool piece_is_white = moved_p.white;
+
+	// Step 1: Discovered attacks as a result of the move
+
+	// Did the move create any discovered checks?
+	piece assailant = puts_in_check_radiate_helper(b, m.from, king_loc);
+
+	if (p_eq(assailant, no_piece)) goto step2; // No piece along line
+	if (assailant.white == white_king) goto step2; // Friendly piece along line
+
+	switch(assailant.type) {
+		case 'B':
+		case 'R':
+		case 'Q':
+			return true;
+		default: ; // nothing
+	}
+
+	// Step 2: Direct attacks as a result of the move
+	step2:
+
+	// did the arrival square put the king in check?
+	if (moved_p.white == white_king) return false; // a teammate cannot check the king
+
+	// direction of radiation for direct check
+	assailant = puts_in_check_radiate_helper(b, m.to, king_loc);
+
+	if (p_eq(assailant, no_piece)) goto step3; // No piece along line
+	if (assailant.white == white_king) goto step3; // Friendly piece along line
+
+	switch(assailant.type) {
+		case 'B':
+		case 'R':
+		case 'Q':
+			return true;
+		default: ; // nothing
+	}
+
+	// Step 3: Direct knight attacks (discovery is impossible)
+	step3:
+	if (moved_p.type != 'N') goto step4;
+	int xdist = abs(m.to.col - king_loc.col);
+	int ydist = abs(m.to.row - king_loc.row);
+	if (((xdist == 1) && (ydist == 2)) || ((xdist == 2) && (ydist == 1))) return true;
+
+	// Step 4: Direct pawn attacks (discovery is impossible)
+	step4:
+	if (moved_p.type != 'P') goto done;
+	if (abs(m.to.col - king_loc.col) != 1) goto done; // pawns must attack diagonally
+	int dy_from_king;
+	dy_from_king = (piece_is_white) ? -1 : 1; 
+	if (king_loc.row + dy_from_king == m.to.row) return true; 
+
+	done:
+	return false;
+}
+
+// See if a given coordinate falls along a straight line with the king
+// If so, see what piece could deliver check from that direction
+piece puts_in_check_radiate_helper(board *b, coord square, coord king_loc) {
+	// direction of radiation for check
+	int dx = 0;
+	int dy = 0;
+	// did the coordinate expose the king to discovered or direct attack in its direction?
+	if (square.col == king_loc.col) {
+		dy = (square.row > king_loc.row) ? 1 : -1;
+	} else if (square.row == king_loc.row) {
+		dx = (square.col > king_loc.col) ? 1 : -1;
+	} else if (abs(king_loc.col - square.col) == abs(king_loc.row - square.row)) {
+		dy = (square.row > king_loc.row) ? 1 : -1;
+		dx = (square.col > king_loc.col) ? 1 : -1;
+	}
+
+	if (dx == 0 && dy == 0) return no_piece;
+
+	piece found = no_piece;
+	int ii = king_loc.col + dx;
+	for (int j = king_loc.row + dy; in_bounds((coord){ii, j}); j += dy) {
+		found = at(b, (coord){ii, j});
+		if (!p_eq(found, no_piece)) break; // find the first piece in the way
+		ii += dx;
+	}
+	return found;
 }
