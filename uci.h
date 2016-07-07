@@ -27,8 +27,6 @@ static board uciboard; // the last known board loaded with the position command
 
 static bool search_running = false;
 
-static FILE *logstr;
-
 static move lastbestmove;
 
 pthread_t search_worker;

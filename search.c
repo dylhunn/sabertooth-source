@@ -83,17 +83,17 @@ int negamax(board *b, int alpha, int beta, int ply, bool actual_white_turn) {
 	}
 
 	if (ply <= 0) { 
-		//return negaquiesce(b, alpha, beta, ply, actual_white_turn);
-		int score = evaluate(b);
+		return negaquiesce(b, alpha, beta, ply, actual_white_turn);
+		/*int score = evaluate(b);
 		if (!actual_white_turn) score = -score;
-		return score;
+		return score;*/
 	}
 
 	sstats.nodes_searched++;
 
 	int num_children = 0;
 	move chosen_move = no_move;
-	move *moves = board_moves(b, &num_children);
+	move *moves = board_moves(b, &num_children, false);
 	/*if (num_children == 0) {
 		//printf("Found a stalemate in the game tree at ply %d.\n", ply);
 		return 0;
@@ -186,11 +186,11 @@ int negaquiesce(board *b, int alpha, int beta, int ply, bool actual_white_turn) 
 
 	// search cutoffs
 	if (stand_pat > alpha) alpha = stand_pat;
-	if (alpha >= beta) return stand_pat;
+	if (alpha >= beta /*|| stand_pat >= beta*/) return stand_pat;
 
 	int num_children = 0;
 	move chosen_move = no_move;
-	move *moves = board_moves(b, &num_children);
+	move *moves = board_moves(b, &num_children, true);
 	/*if (num_children == 0) {
 		//printf("Found a stalemate in the game tree at ply %d.\n", ply);
 		return 0;
@@ -216,7 +216,6 @@ int negaquiesce(board *b, int alpha, int beta, int ply, bool actual_white_turn) 
 	int num_moves_checked = 0;
 
 	for (int i = num_children - 1; i >= 0; i--) {
-		//uint64_t old_hash = b->hash; // for debugging
 		apply(b, moves[i]);
 
 		// never move into check
@@ -227,16 +226,16 @@ int negaquiesce(board *b, int alpha, int beta, int ply, bool actual_white_turn) 
 			continue;
 		}
 
-		// Skip if the move is a non-capture and we are not in check
+		// Skip if the move is a non-capture
 		if (p_eq(moves[i].captured, no_piece) /*&& !in_check(b, king_square.col, king_square.row, b->black_to_move)*/) {
 			unapply(b, moves[i]);
 			continue;
 		}
 
 		int score = -negaquiesce(b, -beta, -alpha, ply - 1, actual_white_turn);
+
 		num_moves_checked++;
 		unapply(b, moves[i]);
-		//assert (old_hash == b->hash);
 
 		if (score >= bestval) {
 			bestval = score;

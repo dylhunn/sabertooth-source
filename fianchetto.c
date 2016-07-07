@@ -39,6 +39,14 @@ void print_analysis(board *b);
 void iterative_deepen(board *b, int max_depth);
 
 int main(int argc, char* argv[]) {
+	// initilize logging
+	/*logstr = fopen("ucilog.txt", "a");
+	if (logstr == NULL) {
+    	printf("info string error opening ucilog file!\n");
+    	exit(1);
+	}
+	fprintf(logstr, "Starting log\n");*/
+
 	for (int i = 0; i < argc; i++) {
 		if(strcmp("-uci", argv[i]) == 0) enter_uci();
 	}
@@ -93,7 +101,7 @@ int repl(void) {
 
 void print_moves(board *b) {
 	int movec = 0;
-	move *list = board_moves(b, &movec);
+	move *list = board_moves(b, &movec, false);
 	printf("%d moves available: ", movec);
 	for (int i = 0; i < movec; i++) {
 		char moveb[6];

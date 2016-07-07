@@ -23,17 +23,32 @@ extern const char *engine_name;
 extern const char *engine_version;
 extern const char *author_name;
 
-bool p_eq(piece a, piece b);
+extern FILE *logstr;
 
-bool c_eq(coord a, coord b);
+inline bool p_eq(piece a, piece b) {
+	return a.type == b.type && a.white == b.white;
+}
 
-bool m_eq(move a, move b);
+inline bool c_eq(coord a, coord b) {
+	return a.col == b.col && a.row == b.row;
+}
 
-bool in_bounds(coord c);
+inline bool m_eq(move a, move b) {
+	return c_eq(a.from, b.from) && c_eq(a.to, b.to) && p_eq(a.captured, b.captured) 
+		&& p_eq(a.promote_to, b.promote_to) && a.c == b.c;
+}
 
-piece at(const board *b, coord c);
+inline bool in_bounds(coord c) {
+	return c.row <= 7 && c.col <= 7; // coordinates are unsigned
+}
 
-void set(board *b, coord c, piece p);
+inline piece at(const board *b, coord c) {
+	return b->b[c.col][c.row];
+}
+
+inline void set(board *b, coord c, piece p) {
+	b->b[c.col][c.row] = p;
+}
 
 extern uint64_t rand64(void);
 

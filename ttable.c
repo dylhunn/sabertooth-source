@@ -91,13 +91,13 @@ void tt_put(board *b, evaluation e) {
 	assert(is_initialized);
 	if (tt_count >= tt_rehash_count) {
 		if (allow_tt_expansion && !tt_expand()) {
-			printf("ERROR: Failed to expand transposition table from %llu entries; clearing.\n", tt_count);
+			stdout_fprintf(logstr, "info string failed to expand transposition table from %llu entries; clearing.\n", tt_count);
 			tt_clear();
 			pthread_mutex_unlock(&tt_writing_lock);
 			return;
 		}
 		if (!allow_tt_expansion) {
-			printf("Transposition table filled; clearing.\n");
+			stdout_fprintf(logstr, "info string transposition table filled; clearing\n");
 			tt_clear();
 			pthread_mutex_unlock(&tt_writing_lock);
 			return;
@@ -115,12 +115,17 @@ void tt_put(board *b, evaluation e) {
 	}
 
 	if (tt_keys[idx] == 0) tt_count++;
+
 	// Never replace exact with inexact, or we could easily lose the PV.
 	if (tt_values[idx].type == exact && e.type != exact) {
 		pthread_mutex_unlock(&tt_writing_lock);
 		return;
 	}
 	if (tt_values[idx].type == qexact && e.type != qexact) {
+		pthread_mutex_unlock(&tt_writing_lock);
+		return;
+	}
+	if (tt_values[idx].type == qexact && e.type != exact) {
 		pthread_mutex_unlock(&tt_writing_lock);
 		return;
 	}
@@ -159,7 +164,7 @@ void tt_clear() {
 bool tt_expand(void) {
 	pthread_mutex_lock(&tt_writing_lock);
 	assert(is_initialized);
-	printf("Expanding transposition table...\n");
+	stdout_fprintf(logstr, "expanding transposition table...\n");
 	uint64_t new_size = tt_size * 2;
 	uint64_t *new_keys = malloc(sizeof(uint64_t) * new_size);
 	evaluation *new_values = malloc(sizeof(evaluation) * new_size);

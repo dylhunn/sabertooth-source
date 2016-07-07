@@ -21,7 +21,7 @@
 // Generates an array of valid moves, and populates the count.
 // (The malloc'ed memory will have a blank slot at the end for ease of move ordering,
 // but this is not reflected in the count.)
-move *board_moves(board *b, int *count);
+move *board_moves(board *b, int *count, bool captures_only);
 
 bool is_legal_move(board *b, move m);
 

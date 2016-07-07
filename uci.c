@@ -13,15 +13,6 @@ void enter_uci() {
 	tt_init();
 	reset_board(&uciboard);
 
-	// initilize logging
-	logstr = fopen("ucilog.txt", "a");
-	if (logstr == NULL) {
-    	printf("info string error opening ucilog file!\n");
-    	exit(1);
-	}
-	/* print some text */
-	fprintf(logstr, "Starting log\n");
-
 	while (true) {
 		char command[max_input_string_length]; // read the input string (ends in \n\0)
 		char *result = fgets(command, max_input_string_length - 1, stdin);
@@ -192,10 +183,10 @@ void *search_entrypoint(void *param) {
 	search_running = true;
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	board working_copy = uciboard; // killing the worker thread might destroy our board
-	for (int i = 2; i <= iterative_deepening_cutoff; i += 2) { // TODO debug: only even depths
+	for (int i = 1; i <= iterative_deepening_cutoff; i++) { 
+		clear_stats();
 		search(&working_copy, i);
 		evaluation *eval = tt_get(&working_copy);
-
 		stdout_fprintf(logstr, "info depth %d time %d nodes %llu score cp %d\n", sstats.depth, (int) sstats.time, sstats.nodes_searched + sstats.qnodes_searched, eval->score);
 		stdout_fprintf(logstr, "info pv ");
 		print_pv(&working_copy, pv_printing_cutoff);
@@ -227,8 +218,8 @@ void *timeout_entrypoint(int *time) {
 	if (m_eq(lastbestmove, no_move)) { // Panic! The search wasn't long enough to complete depth one. Choose a random legal move.
 		stdout_fprintf(logstr, "info string search depth 1 timeout; choosing random move\n");
 		int c;
-		move *moves = board_moves(&uciboard, &c);
-		lastbestmove =  moves[0];
+		move *moves = board_moves(&uciboard, &c, false);
+		lastbestmove = moves[0];
 		free(moves);
 	}
 	stdout_fprintf(logstr, "bestmove %s\n", move_to_string(lastbestmove, buffer));
