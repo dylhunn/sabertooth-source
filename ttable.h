@@ -53,8 +53,10 @@ uint64_t tt_pieceval(board *b, coord c);
  */
 
 // starting size of table, and whether expansion is allowed
-#define TT_MEGABYTES 250
+#define TT_MEGABYTES_DEFAULT 500
 static bool allow_tt_expansion = false;
+
+extern int tt_megabytes;
 
 // To control access
 extern pthread_mutex_t tt_writing_lock;
@@ -63,7 +65,7 @@ extern pthread_mutex_t tt_writing_lock;
 static const double tt_max_load = .7;
 
 // Nodes that haven't been accessed in this many moves are ancient and might be removed
-static const int remove_at_age = 1; // TODO dynamically select? Also consider 2.
+static const int remove_at_age = 2; // TODO dynamically select? Consider levels as low as 1.
 
 static bool is_initialized = false;
 

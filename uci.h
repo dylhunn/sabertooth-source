@@ -29,8 +29,8 @@ static bool search_running = false;
 
 static move lastbestmove;
 
-pthread_t search_worker;
-pthread_t timer_worker;
+extern pthread_t search_worker;
+extern pthread_t timer_worker;
 
 // Called after the engine recieves the string "uci"
 // Configures the engine with the GUI and loops, waiting for commands.

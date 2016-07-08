@@ -1,11 +1,11 @@
 #include "evaluate.h"
 
 // transform coordinates to access piece tables
-int ptw(int c, int r) {
+static inline int ptw(int c, int r) {
 	return c+56-(r*8);
 }
 
-int ptb(int c, int r) {
+static inline int ptb(int c, int r) {
 	return c+(r*8);
 }
 

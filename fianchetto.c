@@ -40,18 +40,18 @@ void iterative_deepen(board *b, int max_depth);
 
 int main(int argc, char* argv[]) {
 	// initilize logging
-	/*logstr = fopen("ucilog.txt", "a");
+	logstr = fopen("ucilog.txt", "a");
 	if (logstr == NULL) {
     	printf("info string error opening ucilog file!\n");
     	exit(1);
 	}
-	fprintf(logstr, "Starting log\n");*/
+	fprintf(logstr, "Starting log\n");
 
 	for (int i = 0; i < argc; i++) {
-		if(strcmp("-uci", argv[i]) == 0) enter_uci();
+		if(strcmp("-d", argv[i]) == 0) repl();
 	}
-	repl();
-	return 0;
+	printf("info string To use the engine in command-line debug mode, run with the -d flag. Entering UCI mode.\n");
+	enter_uci();
 }
 
 int repl(void) {

@@ -70,8 +70,8 @@ void stdout_fprintf(FILE * f, const char * fmt, ...) {
     vprintf(fmt, ap);
     va_end(ap);
     va_start(ap, fmt);
-    //vfprintf(f, fmt, ap);
+    vfprintf(f, fmt, ap);
     va_end(ap);
     fflush(stdout);
-    //fflush(f);
+    fflush(f);
 }

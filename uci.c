@@ -2,9 +2,12 @@
 
 void process_command(char *command_str);
 void *search_entrypoint(void *param);
-void *timeout_entrypoint(int *time);
+void *timeout_entrypoint(void *time);
 void kill_workers(bool print);
 void print_pv(board *b_orig, int maxdepth);
+
+pthread_t search_worker;
+pthread_t timer_worker;
 
 // Called after the engine recieves the string "uci."
 // Configures the engine with the GUI and loops, waiting for commands.
@@ -32,7 +35,8 @@ void process_command(char *command_str) {
 	} else if (strcmp(first_token, "uci") == 0) {
 		stdout_fprintf(logstr, "id name %s %s\n", engine_name, engine_version);
 		stdout_fprintf(logstr, "id author %s\n", author_name);
-		stdout_fprintf(logstr, "info string loading %s%s\n", engine_name, engine_version);
+		stdout_fprintf(logstr, "option name Hash\n");
+		stdout_fprintf(logstr, "info string loading %s %s\n", engine_name, engine_version);
 		// Assume a new game is beginning for noncompilant engines (that don't send ucinewgame)
 		tt_init();
 		reset_board(&uciboard);
@@ -41,6 +45,29 @@ void process_command(char *command_str) {
 	} else if (strcmp(first_token, "ucinewgame") == 0) { // a new game is starting
 		reset_board(&uciboard);
 		tt_init();
+
+	} else if (strcmp(first_token, "setoption") == 0) { // a new game is starting
+		char *option = strtok(NULL, token_sep);
+		if (strcmp(first_token, "name") != 0) {
+			stdout_fprintf(logstr, "info string unknown \"setoption\" option \"%s\"\n", option);
+			return;
+		}
+
+		// Options!
+		if (strcasecmp(option, "Hash") == 0) {
+			option = strtok(NULL, token_sep);
+			if (strcmp(first_token, "value") != 0) {
+				stdout_fprintf(logstr, "info string unknown \"setoption\" option \"%s\"\n", option);
+				return;
+			}
+			char *size = strtok(NULL, token_sep);
+			tt_megabytes = atoi(size);
+			tt_init();
+
+		} else {
+			stdout_fprintf(logstr, "info string unknown \"setoption\" option \"%s\"\n", option);
+			return;
+		}
 
 	} else if (strcmp(first_token, "quit") == 0) { // terminate engine
 		exit(0);
@@ -126,10 +153,10 @@ void process_command(char *command_str) {
 		int *arg = malloc(sizeof(int));
 		*arg = movetime; // TODO this will leak
 		if (movetime == -1) {
-			if (pthread_create(&search_worker, NULL, search_entrypoint, NULL) != 0) {
+			if (pthread_create(&search_worker, NULL, &search_entrypoint, NULL) != 0) {
 				stdout_fprintf(logstr, "info string failed to spawn infinite search thread\n");
 			}
-		} else if (pthread_create(&timer_worker, NULL, timeout_entrypoint, arg) != 0) {
+		} else if (pthread_create(&timer_worker, NULL, &timeout_entrypoint, arg) != 0) {
 			stdout_fprintf(logstr, "info string failed to spawn timed search thread\n");
 		}
 		
@@ -187,8 +214,10 @@ void *search_entrypoint(void *param) {
 		clear_stats();
 		search(&working_copy, i);
 		evaluation *eval = tt_get(&working_copy);
-		stdout_fprintf(logstr, "info depth %d time %d nodes %llu score cp %d\n", sstats.depth, (int) sstats.time, sstats.nodes_searched + sstats.qnodes_searched, eval->score);
-		stdout_fprintf(logstr, "info pv ");
+		uint64_t nodes = sstats.nodes_searched + sstats.qnodes_searched;
+		double nps = (((double) nodes) / (((double) sstats.time) / 1000));
+		stdout_fprintf(logstr, "info depth %d time %d nodes %llu score cp %d hashfull %f nps %llu pv ", 
+			sstats.depth, (int) sstats.time, nodes, eval->score, tt_load() * 10, nps);
 		print_pv(&working_copy, pv_printing_cutoff);
 		stdout_fprintf(logstr, "\n");
 		fflush(stdout);
@@ -197,7 +226,8 @@ void *search_entrypoint(void *param) {
 }
 
 // spawns a search worker, then kills it after the elapsed time in ms and prints the bestmove
-void *timeout_entrypoint(int *time) {
+void *timeout_entrypoint(void *time_p) {
+	int time = *((int *) time_p);
 	lastbestmove = no_move;
 	search_running = true;
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
@@ -207,7 +237,7 @@ void *timeout_entrypoint(int *time) {
 	}
 
 	// Wait in microseconds
-	usleep((*time) * 1000);
+	usleep(time * 1000);
 
 	pthread_mutex_lock(&tt_writing_lock);
 	if (pthread_cancel(search_worker) != 0) {

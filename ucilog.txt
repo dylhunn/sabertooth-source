@@ -1,0 +1,36 @@
+Starting log
+Received command: uci
+
+id name Fianchetto 0.1a
+id author Dylan D. Hunn
+option name Hash
+info string loading Fianchetto 0.1a
+uciok
+Received command: isready
+
+readyok
+Received command: ucinewgame
+
+Received command: isready
+
+readyok
+Received command: ucinewgame
+
+Received command: position startpos
+
+Received command: go infinite
+
+info string infinite search...
+info depth 1 time 0 nodes 47 score cp 10 hashfull 0.000288 nps 42949672960 pv b1a3 
+info depth 2 time 0 nodes 112 score cp 0 hashfull 0.002736 nps 0 pv e2e4 d7d5 
+info depth 3 time 3 nodes 1099 score cp 10 hashfull 0.017928 nps 42949672960 pv b1a3 g8h6 g1h3 
+info depth 4 time 14 nodes 8184 score cp -10 hashfull 0.130536 nps 18446744030759878656 pv g1f3 d7d6 f3d4 c8f5 
+info depth 5 time 477 nodes 240556 score cp -27 hashfull 3.026952 nps 18446743957745434624 pv e2e3 a7a5 e3e4 b8a6 e4e5 
+info depth 6 time 329 nodes 299738 score cp -30 hashfull 5.708160 nps 18446743944860532736 pv e2e3 a7a6 e3e4 e7e5 h2h3 f8c5 
+info depth 7 time 20364 nodes 13883318 score cp -93 hashfull 64.328687 nps 18446743674277593088 pv c2c3 a7a6 c3c4 b7b6 h2h4 c8b7 d2d4 b7g2 
+Received command: stop
+
+info string failed to terminate timer thread (perhaps it has already been killed?) 
+bestmove h2h4
+Received command: quit
+

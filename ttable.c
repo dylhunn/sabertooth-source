@@ -10,13 +10,15 @@ uint64_t zobrist_castle_bq;
 uint64_t zobrist_castle_bk;
 uint64_t zobrist_black_to_move;
 
+int tt_megabytes = TT_MEGABYTES_DEFAULT;
+
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
 static uint64_t tt_size;
 static uint64_t tt_count = 0;
 static uint64_t tt_rehash_count; // computed based on max_load
 
-extern pthread_mutex_t tt_writing_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t tt_writing_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static inline int square_code(coord c) {
 	return (c.col)*8+c.row;
@@ -40,8 +42,8 @@ void tt_init(void) {
 	// first, compute size from memory use
 	pthread_mutex_lock(&tt_writing_lock);
 	const uint64_t bytes_in_mb = 1000000;
-	tt_size = ceil(((double) (TT_MEGABYTES * bytes_in_mb)) / (sizeof(evaluation) + sizeof(uint64_t)));
-	uint64_t check_mb_size = ((double) tt_size * (sizeof(evaluation) + sizeof(uint64_t))) / bytes_in_mb;
+	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / (sizeof(evaluation) + sizeof(uint64_t))));
+	uint64_t check_mb_size = (uint64_t) ((double) tt_size * (sizeof(evaluation) + sizeof(uint64_t))) / bytes_in_mb;
 	printf("info string initializing ttable with %llu slots for total size %llumb\n", tt_size, check_mb_size);
 
 	if (tt_keys != NULL) free(tt_keys);
