@@ -16,21 +16,105 @@ Received command: isready
 readyok
 Received command: ucinewgame
 
+Received command: isready
+
+readyok
+Received command: ucinewgame
+
 Received command: position startpos
 
+Received command: go wtime 180000 btime 180000 movestogo 40
+
+info depth 1 time 0 nodes 5 score cp 10 hashfull 0.000036 nps 83333 pv b1c3 
+info depth 2 time 0 nodes 62 score cp 0 hashfull 0.000936 nps 179710 pv b1a3 g8h6 
+info depth 3 time 3 nodes 365 score cp 30 hashfull 0.006732 nps 111553 pv b2b3 g8h6 c1b2 
+info depth 4 time 34 nodes 4565 score cp 0 hashfull 0.094464 nps 132974 pv b1a3 g8h6 a1b1 h8g8 
+info depth 5 time 328 nodes 46068 score cp 10 hashfull 1.096776 nps 140450 pv b1a3 g8f6 d2d4 b8c6 c1f4 
+info depth 6 time 1990 nodes 337341 score cp -8 hashfull 9.080568 nps 169467 pv b1a3 g8f6 d2d4 b8c6 d4d5 c6b8 
+bestmove b1a3
+Received command: position startpos moves b1a3 b8c6
+
+Received command: go wtime 175350 btime 173600 movestogo 39
+
+info depth 1 time 0 nodes 3 score cp 5 hashfull 0.000036 nps 54545 pv a3c4 
+info depth 2 time 0 nodes 65 score cp -15 hashfull 0.001080 nps 180055 pv b2b4 g8h6 
+info depth 3 time 5 nodes 739 score cp -3 hashfull 0.015336 nps 125000 pv g1f3 d7d5 a3b5 
+info depth 4 time 65 nodes 7476 score cp -30 hashfull 0.179892 nps 113572 pv a1b1 e7e5 g1h3 g8h6 
+info depth 5 time 383 nodes 52415 score cp -2 hashfull 1.443816 nps 136849 pv g1f3 e7e6 c2c3 g8f6 a3c4 
+bestmove g1f3
+Received command: position startpos moves b1a3 b8c6 g1f3 g8f6
+
+Received command: go wtime 170590 btime 168130 movestogo 38
+
+info depth 1 time 0 nodes 8 score cp 5 hashfull 0.000108 nps 64516 pv a3c4 
+info depth 2 time 1 nodes 120 score cp -15 hashfull 0.002736 nps 96000 pv d2d3 h8g8 
+info depth 3 time 15 nodes 1823 score cp 0 hashfull 0.044028 nps 116270 pv b2b4 h8g8 a3c4 
+info depth 4 time 85 nodes 10922 score cp -18 hashfull 0.321876 nps 127529 pv d2d4 d7d5 c1g5 h8g8 g5f6 g7f6 
+info depth 5 time 778 nodes 112066 score cp 0 hashfull 3.236292 nps 143884 pv a1b1 h8g8 b2b4 g8h8 a3c4 
+bestmove a1b1
+Received command: position startpos moves b1a3 b8c6 g1f3 g8f6 a1b1 d7d5
+
+Received command: go wtime 165830 btime 163820 movestogo 37
+
+info depth 1 time 0 nodes 9 score cp -13 hashfull 0.000144 nps 89109 pv a3b5 
+info depth 2 time 1 nodes 120 score cp -50 hashfull 0.002160 nps 114833 pv d2d4 c8f5 
+info depth 3 time 12 nodes 1736 score cp -5 hashfull 0.045612 nps 142179 pv b1a1 h8g8 a3c4 
+info depth 4 time 67 nodes 7417 score cp -28 hashfull 0.235512 nps 109685 pv b1a1 h8g8 f3d4 g8h8 d4c6 b7c6 
+info depth 5 time 1235 nodes 194274 score cp -19 hashfull 5.730948 nps 157208 pv h1g1 h8g8 f3g5 d8d6 c2c4 
+bestmove h1g1
+Received command: position startpos moves b1a3 b8c6 g1f3 g8f6 a1b1 d7d5 h1g1 e7e5
+
+Received command: go wtime 161110 btime 160400 movestogo 36
+
+info depth 1 time 0 nodes 19 score cp -23 hashfull 0.000504 nps 76305 pv a3b5 
+info depth 2 time 4 nodes 393 score cp -40 hashfull 0.012204 nps 93997 pv d2d4 c8e6 
+info depth 3 time 31 nodes 3382 score cp -30 hashfull 0.108900 nps 106309 pv b2b3 f8b4 c1b2 
+info depth 4 time 286 nodes 38803 score cp -75 hashfull 1.250568 nps 135629 pv d2d4 c8f5 d4e5 c6e5 f3e5 f8a3 
+info depth 5 time 1661 nodes 223740 score cp -33 hashfull 7.946460 nps 134663 pv b1a1 h8g8 a1b1 f8b4 a3b5 b4d2 c1d2 
+bestmove b1a1
+Received command: position startpos moves b1a3 b8c6 g1f3 g8f6 a1b1 d7d5 h1g1 e7e5 b1a1 e5e4
+
+Received command: go wtime 156370 btime 156930 movestogo 35
+
+info depth 1 time 0 nodes 28 score cp -30 hashfull 0.000720 nps 123348 pv f3g5 f8a3 b2a3 
+info depth 2 time 2 nodes 352 score cp -87 hashfull 0.010944 nps 133840 pv f3h4 c8f5 
+info depth 3 time 14 nodes 2531 score cp -43 hashfull 0.083304 nps 169400 pv f3e5 f8c5 c2c4 
+info depth 4 time 133 nodes 20522 score cp -90 hashfull 0.684972 nps 153765 pv a3b5 h8g8 f3g5 g8h8 b5a7 c6a7 g5e4 
+info depth 5 time 1519 nodes 231427 score cp -120 hashfull 7.559892 nps 152299 pv b2b4 h8g8 c1b2 f8b4 a3b5 
+bestmove b2b4
+Received command: position startpos moves b1a3 b8c6 g1f3 g8f6 a1b1 d7d5 h1g1 e7e5 b1a1 e5e4 b2b4 e4f3
+
+Received command: go wtime 151650 btime 151870 movestogo 34
+
+Received command: stop
+
+info depth 1 time 0 nodes 133 score cp -338 hashfull 0.003744 nps 164808 pv b4b5 f8a3 b5c6 f3g2 c1a3 g2f1q e1f1 b7c6 g1g7 
+info depth 2 time 4 nodes 570 score cp -338 hashfull 0.021024 nps 138282 pv b4b5 a7a5 b5c6 f8a3 
+info depth 3 time 8 nodes 1138 score cp -338 hashfull 0.055260 nps 135541 pv b4b5 a7a5 b5c6 f8a3 
+info depth 4 time 548 nodes 85778 score cp -369 hashfull 2.779200 nps 156332 pv a1b1 f8b4 e2e4 h8f8 g2f3 d5e4 g1g7 
+info depth 5 time 927 nodes 127767 score cp -340 hashfull 6.831864 nps 137709 pv a1b1 h8g8 d2d4 g8h8 c1f4 
+bestmove a1b1
+Received command: isready
+
+readyok
+Received command: ucinewgame
+
+Received command: position fen r1bqkb1r/ppp2ppp/2n2n2/3p4/4p3/N4N2/PPPPPPPP/R1BQKBR1 w kq - 0 1
+
+info string FEN positions not yet supported
 Received command: go infinite
 
 info string infinite search...
-info depth 1 time 0 nodes 47 score cp 10 hashfull 0.000288 nps 42949672960 pv b1a3 
-info depth 2 time 0 nodes 112 score cp 0 hashfull 0.002736 nps 0 pv e2e4 d7d5 
-info depth 3 time 3 nodes 1099 score cp 10 hashfull 0.017928 nps 42949672960 pv b1a3 g8h6 g1h3 
-info depth 4 time 14 nodes 8184 score cp -10 hashfull 0.130536 nps 18446744030759878656 pv g1f3 d7d6 f3d4 c8f5 
-info depth 5 time 477 nodes 240556 score cp -27 hashfull 3.026952 nps 18446743957745434624 pv e2e3 a7a5 e3e4 b8a6 e4e5 
-info depth 6 time 329 nodes 299738 score cp -30 hashfull 5.708160 nps 18446743944860532736 pv e2e3 a7a6 e3e4 e7e5 h2h3 f8c5 
-info depth 7 time 20364 nodes 13883318 score cp -93 hashfull 64.328687 nps 18446743674277593088 pv c2c3 a7a6 c3c4 b7b6 h2h4 c8b7 d2d4 b7g2 
-Received command: stop
-
-info string failed to terminate timer thread (perhaps it has already been killed?) 
-bestmove h2h4
-Received command: quit
-
+info depth 1 time 0 nodes 5 score cp 10 hashfull 0.000036 nps 116279 pv b1c3 
+info depth 2 time 0 nodes 62 score cp 0 hashfull 0.000936 nps 168937 pv b1a3 g8h6 
+info depth 3 time 3 nodes 365 score cp 30 hashfull 0.006732 nps 108923 pv b2b3 g8h6 c1b2 
+info depth 4 time 33 nodes 4565 score cp 0 hashfull 0.094464 nps 137995 pv b1a3 g8h6 a1b1 h8g8 
+info depth 5 time 332 nodes 46068 score cp 10 hashfull 1.096776 nps 138456 pv b1a3 g8f6 d2d4 b8c6 c1f4 
+info depth 6 time 2641 nodes 337341 score cp -8 hashfull 9.080568 nps 127705 pv b1a3 g8f6 d2d4 b8c6 d4d5 c6b8 
+info depth 7 time 18194 nodes 2386669 score cp 15 hashfull 70.492103 nps 131178 pv b1a3 g8f6 a1b1 h8g8 g1f3 g8h8 a3c4 
+Starting log
+Starting log
+Starting log
+Starting log
+Starting log
+Starting log

@@ -1,4 +1,4 @@
-CFLAGS = -Ofast -Weverything -Wno-padded -Wno-unused-parameter -Wno-unused-variable -Wno-sign-conversion -ggdb
+CFLAGS = -O3 -Weverything -Wno-padded -Wno-sign-conversion -Wno-conversion -Wno-comment -Wno-format-nonliteral -ggdb
 all: fianchetto.o util.o ttable.o movegen.o evaluate.o search.o uci.o
 	clang $(CFLAGS) $^ -o fianchetto
 clean:

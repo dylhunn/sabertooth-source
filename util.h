@@ -25,28 +25,28 @@ extern const char *author_name;
 
 extern FILE *logstr;
 
-inline bool p_eq(piece a, piece b) {
+static inline bool p_eq(piece a, piece b) {
 	return a.type == b.type && a.white == b.white;
 }
 
-inline bool c_eq(coord a, coord b) {
+static inline bool c_eq(coord a, coord b) {
 	return a.col == b.col && a.row == b.row;
 }
 
-inline bool m_eq(move a, move b) {
+static inline bool m_eq(move a, move b) {
 	return c_eq(a.from, b.from) && c_eq(a.to, b.to) && p_eq(a.captured, b.captured) 
 		&& p_eq(a.promote_to, b.promote_to) && a.c == b.c;
 }
 
-inline bool in_bounds(coord c) {
+static inline bool in_bounds(coord c) {
 	return c.row <= 7 && c.col <= 7; // coordinates are unsigned
 }
 
-inline piece at(const board *b, coord c) {
+static inline piece at(const board *b, coord c) {
 	return b->b[c.col][c.row];
 }
 
-inline void set(board *b, coord c, piece p) {
+static inline void set(board *b, coord c, piece p) {
 	b->b[c.col][c.row] = p;
 }
 
@@ -63,4 +63,3 @@ int max(int a, int b);
 void stdout_fprintf(FILE * f, const char * fmt, ...);
 
 #endif
-

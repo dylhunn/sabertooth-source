@@ -1,6 +1,7 @@
 #include "uci.h"
 
 void process_command(char *command_str);
+void read_from_fen(board *b);
 void *search_entrypoint(void *param);
 void *timeout_entrypoint(void *time);
 void kill_workers(bool print);
@@ -61,6 +62,10 @@ void process_command(char *command_str) {
 				return;
 			}
 			char *size = strtok(NULL, token_sep);
+			if (size == NULL) {
+				stdout_fprintf(logstr, "info string invalid hash size selection");
+				return;
+			}
 			tt_megabytes = atoi(size);
 			tt_init();
 
@@ -73,10 +78,12 @@ void process_command(char *command_str) {
 		exit(0);
 
 	} else if (strcmp(first_token, "position") == 0) { // configure the board
+		if (clear_tt_every_move) tt_clear(); // debugging
 		char *mode = strtok(NULL, token_sep);
 		if (strcmp(mode, "startpos") == 0) {
 			reset_board(&uciboard);
 		} else if (strcmp(mode, "fen") == 0) {
+			read_from_fen(&uciboard);
 			stdout_fprintf(logstr, "info string FEN positions not yet supported\n");
 			return;
 		} else {
@@ -87,7 +94,7 @@ void process_command(char *command_str) {
 		if (nextstr == NULL) {
 			return;
 		}
-		if (!strcmp(nextstr, "moves") == 0) {
+		if (strcmp(nextstr, "moves") != 0) {
 			stdout_fprintf(logstr, "info string unknown \"position\" option \"%s\"\n", nextstr);
 		}
 		// process the moves to modify the board
@@ -151,7 +158,7 @@ void process_command(char *command_str) {
 
 		// spawn the worker thread
 		int *arg = malloc(sizeof(int));
-		*arg = movetime; // TODO this will leak
+		*arg = movetime;
 		if (movetime == -1) {
 			if (pthread_create(&search_worker, NULL, &search_entrypoint, NULL) != 0) {
 				stdout_fprintf(logstr, "info string failed to spawn infinite search thread\n");
@@ -159,15 +166,55 @@ void process_command(char *command_str) {
 		} else if (pthread_create(&timer_worker, NULL, &timeout_entrypoint, arg) != 0) {
 			stdout_fprintf(logstr, "info string failed to spawn timed search thread\n");
 		}
+		free(arg);
 		
 	} else if (strcmp(first_token, "stop") == 0) { // end the search
 		kill_workers(true);
-		//tt_clear(); // debugging
 
 	} else {
 		stdout_fprintf(logstr, "info string unsupported UCI operation \"%s\"\n", first_token);
 	}
 
+}
+
+void read_from_fen(board *b) {
+	for (int i = 7; i >= 0; i--) {
+		char *row = strtok(NULL, "/ ");
+		int length = strlen(row);
+		for (int j = 0; j < length; j++) {
+			piece p;
+			if (row[j] <= '8' && row[j] >= '1') { // If the next char is numeric and in board range
+				int num_squares = row[j] - '0';
+				for (int k = 0; k < num_squares; k++) {
+					b->b[j + k][i] = no_piece;
+				}
+				j += (num_squares - 1); // Skip the specified number of squares
+				continue;
+			}
+			p.white = (row[j] >= 'A');
+			p.type = toupper(row[j]);
+			b->b[j][i] = p;
+		}
+	}
+	char *side_to_move = strtok(NULL, " ");
+	if (strcmp(side_to_move, "w") == 0) b->black_to_move = false;
+	else b->black_to_move = true;
+	char *castle_rights = strtok(NULL, " ");
+	b->castle_rights_wq = (strstr(castle_rights, "Q") != NULL);
+	b->castle_rights_wk = (strstr(castle_rights, "K") != NULL);
+	b->castle_rights_bq = (strstr(castle_rights, "q") != NULL);
+	b->castle_rights_bk = (strstr(castle_rights, "k") != NULL);
+	char *en_passant = strtok(NULL, " ");
+	// TODO en passant
+	char *halfmove_draw_clock = strtok(NULL, " ");
+	// TODO halfmove draw
+	char *moves = strtok(NULL, " ");
+	int ply = (atoi(moves) - 1) * 2;
+	if (b->black_to_move) ply++;
+	b->last_move_ply = ply;
+	b->true_game_ply_clock = ply;
+
+	b->hash = tt_hash_position(b);
 }
 
 // Kill a search, if it is running, and print the bestmove.
@@ -216,7 +263,7 @@ void *search_entrypoint(void *param) {
 		evaluation *eval = tt_get(&working_copy);
 		uint64_t nodes = sstats.nodes_searched + sstats.qnodes_searched;
 		double nps = (((double) nodes) / (((double) sstats.time) / 1000));
-		stdout_fprintf(logstr, "info depth %d time %d nodes %llu score cp %d hashfull %f nps %llu pv ", 
+		stdout_fprintf(logstr, "info depth %d time %d nodes %llu score cp %d hashfull %f nps %.0f pv ", 
 			sstats.depth, (int) sstats.time, nodes, eval->score, tt_load() * 10, nps);
 		print_pv(&working_copy, pv_printing_cutoff);
 		stdout_fprintf(logstr, "\n");
@@ -241,7 +288,7 @@ void *timeout_entrypoint(void *time_p) {
 
 	pthread_mutex_lock(&tt_writing_lock);
 	if (pthread_cancel(search_worker) != 0) {
-		stdout_fprintf(logstr, "info string failed to terminate search thread (perhaps it has already been killed?) \n");
+		stdout_fprintf(logstr, "info string failed to queue search thread termination (perhaps it has already been killed?) \n");
 	}
 	pthread_mutex_unlock(&tt_writing_lock);
 	char buffer[6];

@@ -9,7 +9,7 @@ int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps, b
 piece puts_in_check_radiate_helper(board *b, coord square, coord king_loc);
 
 // Adds a move at the front of the list if it's pseudolegal
-static inline bool add_move(board *b, move m, move *list, bool captures_only) {
+static inline bool add_move(move m, move *list, bool captures_only) {
 	if (captures_only && p_eq(m.captured, no_piece)) return false;
 	else list[0] = m;
 	return true;
@@ -110,12 +110,12 @@ int pawn_moves(board *b, coord c, move *list, bool captures_only) {
 	if (p_eq(at(b, (coord){c.col, c.row + dy}), no_piece) && !captures_only) { // front is clear, and we may make non-capturing moves
 		if (promote) {
 			for (int i = 0; i < 4; i++)
-				if (add_move(b, (move){c, (coord){c.col, c.row + dy}, no_piece, 
+				if (add_move((move){c, (coord){c.col, c.row + dy}, no_piece, 
 								(piece){promo_p[i], curr_p.white}, N}, list + added, captures_only)) added++;
 		} else {
-			if (add_move(b, (move){c, {c.col, c.row + dy}, no_piece, no_piece, N}, list + added, captures_only)) added++;
+			if (add_move((move){c, {c.col, c.row + dy}, no_piece, no_piece, N}, list + added, captures_only)) added++;
 			if (unmoved && p_eq(at(b, (coord){c.col, c.row + dy + dy}), no_piece)) // double move
-				if (add_move(b, (move){c, (coord){c.col, c.row + dy + dy}, 
+				if (add_move((move){c, (coord){c.col, c.row + dy + dy}, 
 							no_piece, no_piece, N}, list + added, captures_only)) added++;
 		}
 	}
@@ -127,10 +127,10 @@ int pawn_moves(board *b, coord c, move *list, bool captures_only) {
 		if (p_eq(cap_p, no_piece) || cap_p.white == curr_p.white) continue;
 		if (promote) {
 			for (int i = 0; i < 4; i++) { // promotion types
-				if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, cap_p, 
+				if (add_move((move){c, (coord){c.col + dx, c.row + dy}, cap_p, 
 								(piece){promo_p[i], curr_p.white}, N}, list + added, captures_only)) added++;
 			}
-		} else if (add_move(b, (move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N}, list + added, captures_only)) added++;
+		} else if (add_move((move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N}, list + added, captures_only)) added++;
 	}
 	return added;
 }
@@ -158,16 +158,16 @@ int castle_moves(board *b, coord c, move *list) {
 	}
 	if (k_r_path_clear) {
 		if (isWhite && b->castle_rights_wk) {
-			if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K}, list + added, false)) added++;
+			if (add_move((move){c, (coord){6, row}, no_piece, no_piece, K}, list + added, false)) added++;
 		} else if (!isWhite && b->castle_rights_bk) {
-			if (add_move(b, (move){c, (coord){6, row}, no_piece, no_piece, K}, list + added, false)) added++;
+			if (add_move((move){c, (coord){6, row}, no_piece, no_piece, K}, list + added, false)) added++;
 		}
 	}
 	if (q_r_path_clear) {
 		if (isWhite && b->castle_rights_wq) {
-			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added, false)) added++;
+			if (add_move((move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added, false)) added++;
 		} else if (!isWhite && b->castle_rights_bq) {
-			if (add_move(b, (move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added, false)) added++;
+			if (add_move((move){c, (coord){2, row}, no_piece, no_piece, Q}, list + added, false)) added++;
 		}
 	}
 	return added;
@@ -185,7 +185,7 @@ int slide_moves(board *b, coord orig_c, move *list, int dx, int dy, int steps, b
 		piece curr_p = at(b, curr_c);
 		bool is_blocked = !p_eq(curr_p, no_piece);
 		if (is_blocked && (curr_p.white == at(b, orig_c).white)) break; // blocked
-		if (add_move(b, (move){orig_c, curr_c, curr_p, no_piece, N}, list + added, captures_only)) added++; // freely move
+		if (add_move((move){orig_c, curr_c, curr_p, no_piece, N}, list + added, captures_only)) added++; // freely move
 		if (is_blocked) break; // captured
 	}
 	return added;

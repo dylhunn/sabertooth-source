@@ -53,7 +53,7 @@ uint64_t tt_pieceval(board *b, coord c);
  */
 
 // starting size of table, and whether expansion is allowed
-#define TT_MEGABYTES_DEFAULT 500
+#define TT_MEGABYTES_DEFAULT 1000
 static bool allow_tt_expansion = false;
 
 extern int tt_megabytes;

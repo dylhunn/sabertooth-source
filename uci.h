@@ -36,4 +36,6 @@ extern pthread_t timer_worker;
 // Configures the engine with the GUI and loops, waiting for commands.
 void enter_uci(void) __attribute__ ((noreturn));
 
+void read_from_fen(board *b);
+
 #endif

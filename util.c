@@ -64,7 +64,7 @@ int max(int a, int b) {
 	return a > b ? a : b;
 }
 
-void stdout_fprintf(FILE * f, const char * fmt, ...) {
+void stdout_fprintf(FILE *f, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     vprintf(fmt, ap);

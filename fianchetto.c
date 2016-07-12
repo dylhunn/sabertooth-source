@@ -69,6 +69,10 @@ int repl(void) {
 		if (buffer[2] != '\n') edepth = 10 * edepth + (buffer[2] - '0');
 		move m;
 		switch(buffer[0]) {
+			case 'f':
+				strtok(buffer, " ");
+				read_from_fen(&b);
+				break;
 			case 'e':
 				printf("Calculating...\n");
 				system("clear");
@@ -85,7 +89,7 @@ int repl(void) {
 					printf("Read move: %s\n", move_to_string(m, buffer));
 					b.true_game_ply_clock++;
 					apply(&b, m);
-					//tt_clear(); // for debugging
+					if (clear_tt_every_move) tt_clear(); // for debugging
 				}
 				printf("\n");
 				break;
@@ -137,6 +141,7 @@ void print_board(board *b) {
 
 void print_analysis(board *b_orig) {
 	int curr_depth = depth_limit;
+	searchstats sstats_stored = sstats;
 	board b_cpy = *b_orig;
 	board *b = &b_cpy;
 	evaluation *eval = tt_get(b);
@@ -156,12 +161,12 @@ void print_analysis(board *b_orig) {
 		apply(b, eval->best);
 		eval = tt_get(b);
 	} while (eval != NULL && /*!m_eq(eval->best, no_move) &&*/ curr_depth-- > 0);
-	double rate = ((double) sstats.nodes_searched + sstats.qnodes_searched) / sstats.time;
-	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms %.0fkN/s)", 
-		sstats.nodes_searched, sstats.qnodes_searched, sstats.qnode_aborts, sstats.time, rate);
+	double rate = ((double) sstats_stored.nodes_searched + sstats_stored.qnodes_searched) / sstats_stored.time;
+	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms, %.0fkN/s)", 
+		sstats_stored.nodes_searched, sstats_stored.qnodes_searched, sstats_stored.qnode_aborts, sstats_stored.time, rate);
 	
 	printf("\n\t(ttable: %llu/%llu = %.2f%% load, %llu hits, %llu misses, %llu inserts (with %llu overwrites), %llu insert failures)", 
-		get_tt_count(), get_tt_size(), tt_load(), sstats.ttable_hits, sstats.ttable_misses, sstats.ttable_inserts, sstats.ttable_overwrites, sstats.ttable_insert_failures);
+		get_tt_count(), get_tt_size(), tt_load(), sstats_stored.ttable_hits, sstats_stored.ttable_misses, sstats_stored.ttable_inserts, sstats_stored.ttable_overwrites, sstats_stored.ttable_insert_failures);
 	printf("\n");
 }
 

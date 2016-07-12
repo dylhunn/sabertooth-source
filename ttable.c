@@ -125,21 +125,22 @@ void tt_put(board *b, evaluation e) {
 		idx = (idx + 1) % tt_size;
 	}
 
+	// If it is a new entry, skip the replacement checks
+	if (tt_keys[idx] == 0 || overwriting == true) goto skipchecks;
+
 	// Never replace exact with inexact, or we could easily lose the PV.
 	if (tt_values[idx].type == exact && e.type != exact) {
 		sstats.ttable_insert_failures++;
 		pthread_mutex_unlock(&tt_writing_lock);
 		return;
 	}
-	if (tt_values[idx].type == qexact && e.type != qexact) {
-		sstats.ttable_insert_failures++;
-		pthread_mutex_unlock(&tt_writing_lock);
-		return;
-	}
-	if (tt_values[idx].type == qexact && e.type != exact) {
-		sstats.ttable_insert_failures++;
-		pthread_mutex_unlock(&tt_writing_lock);
-		return;
+	// only replace qexact with other qexact or exact
+	if (tt_values[idx].type == qexact) {
+		if (e.type != qexact && e.type != exact) {
+			sstats.ttable_insert_failures++;
+			pthread_mutex_unlock(&tt_writing_lock);
+			return;
+		}
 	}
 	// Always replace inexact with exact;
 	// otherwise, we might fail to replace a cutoff with a "shallow" ending of a PV.
