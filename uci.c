@@ -180,20 +180,23 @@ void process_command(char *command_str) {
 void read_from_fen(board *b) {
 	for (int i = 7; i >= 0; i--) {
 		char *row = strtok(NULL, "/ ");
+		printf("\nreviewing row %s\n", row);
 		int length = strlen(row);
+		int gridj = 0;
 		for (int j = 0; j < length; j++) {
 			piece p;
 			if (row[j] <= '8' && row[j] >= '1') { // If the next char is numeric and in board range
 				int num_squares = row[j] - '0';
 				for (int k = 0; k < num_squares; k++) {
-					b->b[j + k][i] = no_piece;
+					b->b[gridj + k][i] = no_piece;
 				}
-				j += (num_squares - 1); // Skip the specified number of squares
+				gridj += num_squares;
 				continue;
 			}
-			p.white = (row[j] >= 'A');
+			p.white = !(row[j] >= 'a');
 			p.type = toupper(row[j]);
-			b->b[j][i] = p;
+			b->b[gridj][i] = p;
+			gridj++;
 		}
 	}
 	char *side_to_move = strtok(NULL, " ");
