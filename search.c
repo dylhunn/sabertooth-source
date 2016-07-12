@@ -46,6 +46,7 @@ int search(board *b, int ply) {
     return result;
 }
 
+// NOT currently in use
 int mtd_f(board *board, int ply) {
 	int g; // First guess of evaluation
 	evaluation *stored = tt_get(board); // Use last pass in Transposition Table
