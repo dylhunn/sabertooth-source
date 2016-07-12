@@ -62,4 +62,7 @@ int max(int a, int b);
 
 void stdout_fprintf(FILE * f, const char * fmt, ...);
 
+void nlopt_qsort_r(void *base_, size_t nmemb, size_t size, void *thunk,
+		   int (*compar)(void *, const void *, const void *));
+
 #endif
