@@ -1,12 +1,12 @@
 #include "search.h"
 
-// set by last call to search()
+// Search statistics; set by last call to search()
 searchstats sstats;
 
+// Local functions
 int mtd_f(board *b, int ply);
 int abq(board *b, int alpha, int beta, int ply);
 int relative_evaluation(board *b);
-//int negaquiesce(board *b, int alpha, int beta, int ply, bool is_actually_whites_turn);
 int capture_move_comparator(const board *board, const move *a, const move *b);
 
 void clear_stats() {
@@ -46,7 +46,7 @@ int search(board *b, int ply) {
     return result;
 }
 
-// NOT currently in use
+// NOT currently in usegi
 int mtd_f(board *board, int ply) {
 	int g; // First guess of evaluation
 	evaluation *stored = tt_get(board); // Use last pass in Transposition Table

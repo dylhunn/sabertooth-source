@@ -47,13 +47,15 @@ int main(int argc, char* argv[]) {
 	}
 	fprintf(logstr, "Starting log\n");
 
+	// Should we enter debug moce?
 	for (int i = 0; i < argc; i++) {
 		if(strcmp("-d", argv[i]) == 0) repl();
 	}
 	printf("info string To use the engine in command-line debug mode, run with the -d flag. Entering UCI mode.\n");
-	enter_uci();
+	enter_uci(); // Enter UCI mode
 }
 
+// Main debug-mode UI loop
 int repl(void) {
 	tt_init();
 	board b; 
@@ -69,17 +71,17 @@ int repl(void) {
 		if (buffer[2] != '\n') edepth = 10 * edepth + (buffer[2] - '0');
 		move m;
 		switch(buffer[0]) {
-			case 'f':
+			case 'f': // "Hidden" FEN-String option; invoke like "f rkb..." to load a FEN string
 				strtok(buffer, " ");
 				read_from_fen(&b);
 				break;
-			case 'e':
+			case 'e': // Search in a position and print the PV
 				printf("Calculating...\n");
 				system("clear");
 				iterative_deepen(&b, edepth);
 				printf("\n");
 				break;
-			case 'm':
+			case 'm': // Execute a move
 				system("clear");
 				if (!string_to_move(&b, buffer + 1, &m)) {
 					move_to_string(m, buffer);
@@ -93,7 +95,7 @@ int repl(void) {
 				}
 				printf("\n");
 				break;
-			case 'q':
+			case 'q': // Quit
 				exit(0);
 			default:
 				system("clear");
@@ -139,6 +141,7 @@ void print_board(board *b) {
 	printf("\n");
 }
 
+// Print the analysis (PV) of a position by consulting the Transposition Table.
 void print_analysis(board *b_orig) {
 	int curr_depth = depth_limit;
 	searchstats sstats_stored = sstats;
@@ -160,7 +163,7 @@ void print_analysis(board *b_orig) {
 		printf("%s ", move_to_string(eval->best, move));
 		apply(b, eval->best);
 		eval = tt_get(b);
-	} while (eval != NULL && /*!m_eq(eval->best, no_move) &&*/ curr_depth-- > 0);
+	} while (eval != NULL && curr_depth-- > 0);
 	double rate = ((double) sstats_stored.nodes_searched + sstats_stored.qnodes_searched) / sstats_stored.time;
 	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms, %.0fkN/s)", 
 		sstats_stored.nodes_searched, sstats_stored.qnodes_searched, sstats_stored.qnode_aborts, sstats_stored.time, rate);
@@ -176,7 +179,6 @@ void iterative_deepen(board *b, int max_depth) {
 		clear_stats();
 		printf("Searching at depth %d... ", i);
 		fflush(stdout);
-		//tt_clear();
 		search(b, i);
 		print_analysis(b);
 	}

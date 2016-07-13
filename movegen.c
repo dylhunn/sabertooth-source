@@ -339,6 +339,7 @@ bool in_check(board *b, int col, int row, bool by_white) {
 // checks if a given move, ALREADY applied, has put the specified color's king in check
 // this is slightly more efficient than in_check
 // precondition: the specified King was NOT already in check
+// TODO This is buggy and needs to be fixed before using
 bool puts_in_check(board *b, move m, bool white_king) {
 	coord king_loc = white_king ? b->white_king : b->black_king;
 

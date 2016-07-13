@@ -177,6 +177,8 @@ void process_command(char *command_str) {
 
 }
 
+// Read the board position from a FEN string
+// Assumes the FEN string can be read using strtok()
 void read_from_fen(board *b) {
 	for (int i = 7; i >= 0; i--) {
 		char *row = strtok(NULL, "/ ");
