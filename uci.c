@@ -182,7 +182,6 @@ void process_command(char *command_str) {
 void read_from_fen(board *b) {
 	for (int i = 7; i >= 0; i--) {
 		char *row = strtok(NULL, "/ ");
-		printf("\nreviewing row %s\n", row);
 		int length = strlen(row);
 		int gridj = 0;
 		for (int j = 0; j < length; j++) {

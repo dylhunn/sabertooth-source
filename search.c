@@ -22,7 +22,9 @@ void clear_stats() {
 	sstats.ttable_overwrites = 0;
 }
 
+// Compute the amount of time to spend on the next move
 // Some parameters might be -1 if they do not apply
+// TODO - this algorithm is naive
 int time_use(board *b, int time_left, int increment, int movestogo) {
 	if (time_left < 5000) return time_left / 10; // always freak out if we are almost out of time
 	// Assume the game is 45 moves long, but never use more than 1/5th of the remaining time
@@ -35,18 +37,18 @@ int search(board *b, int ply) {
 	sstats.depth = ply;
 	// Start timer for the search
 	struct timeval t1, t2;
-    gettimeofday(&t1, NULL);
+   	gettimeofday(&t1, NULL);
 	//int result = mtd_f(b, ply);
 	int result = abq(b, NEG_INFINITY, POS_INFINITY, ply);
 	gettimeofday(&t2, NULL);
-    // Compute and print the elapsed time in millisec
-    double search_millisec = (t2.tv_sec - t1.tv_sec) * 1000.0; // sec to ms
-    search_millisec += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
-    sstats.time = search_millisec;
-    return result;
+	// Compute and print the elapsed time in millisec
+	double search_millisec = (t2.tv_sec - t1.tv_sec) * 1000.0; // sec to ms
+	search_millisec += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
+	sstats.time = search_millisec;
+	return result;
 }
 
-// NOT currently in usegi
+// NOT currently in use
 int mtd_f(board *board, int ply) {
 	int g; // First guess of evaluation
 	evaluation *stored = tt_get(board); // Use last pass in Transposition Table
