@@ -117,7 +117,7 @@ int abq(board *b, int alpha, int beta, int ply) {
 		int score = -abq(b, -beta, -alpha, ply - 1);
 		num_moves_actually_examined++;
 		unapply(b, moves[i]);
-		if (score >= best_score_yet) {
+		if (score > best_score_yet) {
 			best_score_yet = score;
 			best_move_yet = moves[i];
 		}
