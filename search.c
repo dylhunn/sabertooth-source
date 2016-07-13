@@ -38,8 +38,9 @@ int search(board *b, int ply) {
 	// Start timer for the search
 	struct timeval t1, t2;
    	gettimeofday(&t1, NULL);
-	//int result = mtd_f(b, ply);
-	int result = abq(b, NEG_INFINITY, POS_INFINITY, ply);
+   	int result;
+	if (use_mtd_f) result = mtd_f(b, ply);
+	else result = abq(b, NEG_INFINITY, POS_INFINITY, ply);
 	gettimeofday(&t2, NULL);
 	// Compute and print the elapsed time in millisec
 	double search_millisec = (t2.tv_sec - t1.tv_sec) * 1000.0; // sec to ms
@@ -48,7 +49,6 @@ int search(board *b, int ply) {
 	return result;
 }
 
-// NOT currently in use
 int mtd_f(board *board, int ply) {
 	int g; // First guess of evaluation
 	evaluation *stored = tt_get(board); // Use last pass in Transposition Table
@@ -63,7 +63,7 @@ int mtd_f(board *board, int ply) {
 		int beta;
 		if (g == lower_bound) beta = g+1;
 		else beta = g;
-		//g = negamax(board, beta-1, beta, ply, !board->black_to_move);
+		g = abq(board, beta-1, beta, ply);
 		if (g < beta) upper_bound = g;
 		else lower_bound = g;
 	}
@@ -73,7 +73,17 @@ int mtd_f(board *board, int ply) {
 // Unified alpha-beta and quiescence search
 int abq(board *b, int alpha, int beta, int ply) {
 	pthread_testcancel(); // To allow search worker thread termination
+	int alpha_orig = alpha; // For use in later TT storage
 	bool quiescence = (ply <= 0);
+
+	// Retrieve the value from the transposition table, if appropriate
+	evaluation *stored = tt_get(b);
+	if (stored != NULL && stored->depth >= ply && use_ttable) {
+		if (stored->type == qexact || stored->type == exact) return stored->score;
+		if (stored->type == qlowerbound || stored->type == lowerbound) alpha = max(alpha, stored->score);
+		else if (stored->type == qupperbound || stored->type == upperbound) beta = min(beta, stored->score);
+		if (alpha >= beta) return stored->score;
+	}
 
 	// Generate all possible moves for the quiscence search or normal search, and compute the
 	// static evaluation if applicable.
@@ -81,7 +91,7 @@ int abq(board *b, int alpha, int beta, int ply) {
 	int num_available_moves = 0;
 	if (quiescence) moves = board_moves(b, &num_available_moves, true); // Generate only captures
 	else moves = board_moves(b, &num_available_moves, false); // Generate all moves
-	if (quiescence && !useqsearch) return relative_evaluation(b); // If qsearch is turned off
+	if (quiescence && !use_qsearch) return relative_evaluation(b); // If qsearch is turned off
 
 	// Abort if the quiescence search is too deep (currently 45 plies)
 	if (ply < -quiesce_ply_cutoff) { 
@@ -94,6 +104,10 @@ int abq(board *b, int alpha, int beta, int ply) {
 		int score = relative_evaluation(b);
 		alpha = max(alpha, score);
 		if (alpha >= beta) return score;
+	} else if (stored != NULL && use_tt_move_hueristic) {
+	// For non-quiescence search, use the TT entry as a hueristic
+		moves[num_available_moves] = stored->best;
+		num_available_moves++;
 	}
 
 	// Update search stats
@@ -104,11 +118,11 @@ int abq(board *b, int alpha, int beta, int ply) {
 	if (quiescence && mvvlva) nlopt_qsort_r(moves, num_available_moves, sizeof(move), b, &capture_move_comparator);
 
 	move best_move_yet = no_move;
-	int best_score_yet = NEG_INFINITY;
+	int best_score_yet = NEG_INFINITY; 
 	int num_moves_actually_examined = 0; // We might end up in checkmate
 	for (int i = num_available_moves - 1; i >= 0; i--) { // Iterate backwards to match MVV-LVA sort order
 		apply(b, moves[i]);
-		// never move into check
+		// Never move into check
 		coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
 		if (in_check(b, king_loc.col, king_loc.row, !(b->black_to_move))) {
 			unapply(b, moves[i]);
@@ -131,12 +145,16 @@ int abq(board *b, int alpha, int beta, int ply) {
 	if (num_moves_actually_examined == 0) {
 		if (quiescence) return relative_evaluation(b); // TODO: qsearch doesn't understand stalemate or checkmate
 		coord king_loc = b->black_to_move ? b->black_king : b->white_king;
-		if (in_check(b, king_loc.col, king_loc.row, b->black_to_move)) return NEG_INFINITY; // checkmate
+		// This seems paradoxical, but the +1 is necessary so we pick some move in case of checkmate
+		if (in_check(b, king_loc.col, king_loc.row, b->black_to_move)) return NEG_INFINITY + 1; // checkmate
 		else return 0; // stalemate
 	}
 
-	// record the selected move in the transposition table
-	evaltype type = (quiescence) ? qexact : exact;
+	// Record the selected move in the transposition table
+	evaltype type;
+	if (best_score_yet <= alpha_orig) type = (quiescence) ? qupperbound : upperbound;
+	else if (best_score_yet >= beta) type = (quiescence) ? qlowerbound : lowerbound;
+	else type = (quiescence) ? qexact : exact;
 	evaluation eval = {.best = best_move_yet, .score = best_score_yet, .type = type, .depth = ply};
 	tt_put(b, eval);
 	return best_score_yet;

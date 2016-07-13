@@ -40,14 +40,16 @@ void iterative_deepen(board *b, int max_depth);
 
 int main(int argc, char* argv[]) {
 	// initilize logging
-	logstr = fopen("ucilog.txt", "a");
-	if (logstr == NULL) {
-    	printf("info string error opening ucilog file!\n");
-    	exit(1);
+	if (use_log_file) {
+		logstr = fopen("ucilog.txt", "a");
+		if (logstr == NULL) {
+	    	printf("info string error opening ucilog file!\n");
+	    	exit(1);
+		}
+		fprintf(logstr, "Starting log\n");
 	}
-	fprintf(logstr, "Starting log\n");
 
-	// Should we enter debug moce?
+	// Should we enter debug mode?
 	for (int i = 0; i < argc; i++) {
 		if(strcmp("-d", argv[i]) == 0) repl();
 	}

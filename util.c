@@ -3,9 +3,9 @@
 const piece no_piece = NO_PIECE;
 const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE, N};
 
-const char *engine_name = "Fianchetto";
-const char *engine_version = "0.1a";
-const char *author_name = "Dylan D. Hunn";
+const char *engine_name = ENGINE_NAME;
+const char *engine_version = ENGINE_VERSION;
+const char *author_name = AUTHOR_NAME;
 FILE *logstr;
 
 uint64_t rand64(void) {
@@ -70,10 +70,10 @@ void stdout_fprintf(FILE *f, const char *fmt, ...) {
     vprintf(fmt, ap);
     va_end(ap);
     va_start(ap, fmt);
-    vfprintf(f, fmt, ap);
+    if (use_log_file) vfprintf(f, fmt, ap);
     va_end(ap);
     fflush(stdout);
-    fflush(f);
+    if (use_log_file) fflush(f);
 }
 
 // qsort_r implementation from nlopt on Github

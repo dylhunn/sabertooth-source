@@ -20,6 +20,7 @@ static evaluation *tt_values = NULL;
 static uint64_t tt_size;
 static uint64_t tt_count = 0;
 static uint64_t tt_rehash_count; // When to perform a rehash; computed based on max_load
+static bool is_initialized = false;
 
 // To prevent the search worker from being killed while writing to the table
 pthread_mutex_t tt_writing_lock = PTHREAD_MUTEX_INITIALIZER;

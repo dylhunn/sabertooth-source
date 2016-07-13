@@ -31,10 +31,13 @@ static const int NEG_INFINITY = -999999;
 /*
  * Search settings
  */
+static const bool use_mtd_f = true; // Use MTD-F optimization on top of alpha-beta search; use_ttable must also be on
 static const int quiesce_ply_cutoff = 45; // Quiescence search will cut off after this many plies
 static const bool mvvlva = true; // Capture hueristic
-static const bool useqsearch = true; // Quiescence search
-static const int clear_tt_every_move = true;
+static const bool use_qsearch = true; // Quiescence search
+static const bool clear_tt_every_move = false; // Clear the transposition table after each search completes
+static const bool use_ttable = true; // Should the transposition table be used to generate search cutoffs?
+static const bool use_tt_move_hueristic = true; // Use the last move stored in the TT as a "best-first" hueristic
 
 /*
  * Search statistics

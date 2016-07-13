@@ -78,7 +78,7 @@ void process_command(char *command_str) {
 		exit(0);
 
 	} else if (strcmp(first_token, "position") == 0) { // configure the board
-		if (clear_tt_every_move) tt_clear(); // debugging
+		if (clear_tt_every_move) tt_clear();
 		char *mode = strtok(NULL, token_sep);
 		if (strcmp(mode, "startpos") == 0) {
 			reset_board(&uciboard);
