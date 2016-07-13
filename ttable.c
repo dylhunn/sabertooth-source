@@ -3,6 +3,7 @@
 void tt_auto_cleanup(void);
 bool tt_expand(void);
 
+// Zobrist table data for hashing board positions
 uint64_t zobrist[64][12]; // zobrist table for pieces
 uint64_t zobrist_castle_wq; // removed when castling rights are lost
 uint64_t zobrist_castle_wk;
@@ -10,20 +11,25 @@ uint64_t zobrist_castle_bq;
 uint64_t zobrist_castle_bk;
 uint64_t zobrist_black_to_move;
 
+// How large should the table be?
 int tt_megabytes = TT_MEGABYTES_DEFAULT;
 
+// Table data
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
 static uint64_t tt_size;
 static uint64_t tt_count = 0;
-static uint64_t tt_rehash_count; // computed based on max_load
+static uint64_t tt_rehash_count; // When to perform a rehash; computed based on max_load
 
+// To prevent the search worker from being killed while writing to the table
 pthread_mutex_t tt_writing_lock = PTHREAD_MUTEX_INITIALIZER;
 
+// The index of a given board coordinate in the Zobrist table
 static inline int square_code(coord c) {
 	return (c.col)*8+c.row;
 }
 
+// The percentage load on the table
 double tt_load() {
 	assert(is_initialized);
 	return 100 * ((double) tt_count) / tt_size;
@@ -39,7 +45,7 @@ uint64_t get_tt_size() {
 
 // Invoke to prepare transposition table
 void tt_init(void) {
-	// first, compute size from memory use
+	// First, compute size from memory use
 	pthread_mutex_lock(&tt_writing_lock);
 	const uint64_t bytes_in_mb = 1000000;
 	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / (sizeof(evaluation) + sizeof(uint64_t))));
@@ -56,6 +62,7 @@ void tt_init(void) {
 	tt_count = 0;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * tt_size));
 
+	// Populate Zobrist data
 	srand((unsigned int) time(NULL));
 	for (int i = 0; i < 64; i++) {
 		for (int j = 0; j < 12; j++) {
@@ -74,12 +81,15 @@ void tt_init(void) {
 
 // Automatically called
 void tt_auto_cleanup(void) {
+	// Commented out in the interm for the sake of killing the worker thread
 	/*if (tt_keys) free(tt_keys);
 	tt_keys = NULL;
 	if (tt_values) free(tt_values);
 	tt_values = NULL;*/
 }
 
+// Hash a board position.
+// Usually, you should use the board's "hash" field instead, which is updated incrementally.
 uint64_t tt_hash_position(board *b) {
 	assert(is_initialized);
 	uint64_t hash = 0;
@@ -96,7 +106,9 @@ uint64_t tt_hash_position(board *b) {
 	return hash;
 }
 
-// TODO - permit storing both upper and lower bounds in an inexact node
+// Put a new entry in the transposition table.
+// Only replaces under certain conditions, to avoid overwriting a principal variation (PV).
+// Overwrites ancient entries.
 void tt_put(board *b, evaluation e) {
 	pthread_mutex_lock(&tt_writing_lock);
 	assert(is_initialized);
@@ -164,6 +176,7 @@ void tt_put(board *b, evaluation e) {
 	pthread_mutex_unlock(&tt_writing_lock);
 }
 
+// Fetch an entry from the transposition table.
 // Returns NULL if entry is not found.
 evaluation *tt_get(board *b) {
 	assert(is_initialized);
@@ -186,6 +199,7 @@ void tt_clear() {
 	tt_init();
 }
 
+// Expand the table. This won't be called unless the appropriate setting is activated in the .h file.
 bool tt_expand(void) {
 	pthread_mutex_lock(&tt_writing_lock);
 	assert(is_initialized);
@@ -211,6 +225,7 @@ bool tt_expand(void) {
 	return true;
 }
 
+// Get the Zobrist hash value of a piece at a board location.
 uint64_t tt_pieceval(board *b, coord c) {
 	assert(is_initialized);
 	int piece_code = 0;

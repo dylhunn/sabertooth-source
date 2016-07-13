@@ -84,7 +84,7 @@ void process_command(char *command_str) {
 			reset_board(&uciboard);
 		} else if (strcmp(mode, "fen") == 0) {
 			read_from_fen(&uciboard);
-			stdout_fprintf(logstr, "info string FEN positions not yet supported\n");
+			stdout_fprintf(logstr, "info string attempted to read FEN position; may be buggy\n");
 			return;
 		} else {
 			stdout_fprintf(logstr, "info string unknown \"position\" option \"%s\"\n", mode);
