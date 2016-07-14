@@ -91,11 +91,15 @@ int abq(board *b, int alpha, int beta, int ply) {
 	int num_available_moves = 0;
 	if (quiescence) moves = board_moves(b, &num_available_moves, true); // Generate only captures
 	else moves = board_moves(b, &num_available_moves, false); // Generate all moves
-	if (quiescence && !use_qsearch) return relative_evaluation(b); // If qsearch is turned off
+	if (quiescence && !use_qsearch) {
+		free(moves);
+		return relative_evaluation(b); // If qsearch is turned off
+	}
 
 	// Abort if the quiescence search is too deep (currently 45 plies)
 	if (ply < -quiesce_ply_cutoff) { 
 		sstats.qnode_aborts++;
+		free(moves);
 		return relative_evaluation(b);
 	}
 
@@ -103,7 +107,10 @@ int abq(board *b, int alpha, int beta, int ply) {
 	if (quiescence) {
 		int score = relative_evaluation(b);
 		alpha = max(alpha, score);
-		if (alpha >= beta) return score;
+		if (alpha >= beta) {
+			free(moves);
+			return score;
+		}
 	} else if (stored != NULL && use_tt_move_hueristic) {
 	// For non-quiescence search, use the TT entry as a hueristic
 		moves[num_available_moves] = stored->best;
@@ -138,6 +145,7 @@ int abq(board *b, int alpha, int beta, int ply) {
 		alpha = max(alpha, best_score_yet);
 		if (alpha >= beta) break;
 	}
+	free(moves); // We are done with the array
 
 	// We have no available moves (or captures) that don't leave us in check
 	// This means checkmate or stalemate in normal search

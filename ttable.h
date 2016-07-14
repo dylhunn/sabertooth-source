@@ -53,14 +53,14 @@ uint64_t tt_pieceval(board *b, coord c);
  */
 
 // starting size of table, and whether expansion is allowed
-#define TT_MEGABYTES_DEFAULT 1000
+#define TT_MEGABYTES_DEFAULT 500
 extern int tt_megabytes; // Don't set a value here 
 static bool allow_tt_expansion = false;
 extern pthread_mutex_t tt_writing_lock; // To control access
 // Re-hash at 70% load factor
-static const double tt_max_load = .7;
+static const double tt_max_load = .75;
 // Nodes that haven't been accessed in this many moves are ancient and might be removed
-static const int remove_at_age = 2; // TODO dynamically select? Consider levels as low as 1.
+static const int remove_at_age = 3; // TODO dynamically select?
 
 // Randomly selected zobrist values used to hash board state
 extern uint64_t zobrist[64][12]; // zobrist table for pieces

@@ -29,7 +29,7 @@ typedef struct move {
 	coord to;
 	piece captured;
 	piece promote_to;
-	castle c;
+	castle c; // castle; structure packing
 } move;
 
 typedef struct board {
@@ -68,10 +68,10 @@ typedef enum evaltype {
 
 typedef struct evaluation {
 	move best;
+	evaltype type; // evaltype; structure packing
 	int score;
-	evaltype type;
-	int depth;
 	uint16_t last_access_move; // used for age to delete ancient entries; set automatically by the TT
+	int depth;
 } evaluation;
 
 typedef struct searchstats {

@@ -116,14 +116,14 @@ void tt_put(board *b, evaluation e) {
 	if (tt_count >= tt_rehash_count) {
 		if (allow_tt_expansion && !tt_expand()) {
 			stdout_fprintf(logstr, "info string failed to expand transposition table from %llu entries; clearing.\n", tt_count);
+			pthread_mutex_unlock(&tt_writing_lock); // Unlock because clear() will re-lock
 			tt_clear();
-			pthread_mutex_unlock(&tt_writing_lock);
 			return;
 		}
 		if (!allow_tt_expansion) {
 			stdout_fprintf(logstr, "info string transposition table filled; clearing\n");
+			pthread_mutex_unlock(&tt_writing_lock); // Unlock because clear() will re-lock
 			tt_clear();
-			pthread_mutex_unlock(&tt_writing_lock);
 			return;
 		}
 	}

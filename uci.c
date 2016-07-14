@@ -245,6 +245,10 @@ void print_pv(board *b_orig, int maxdepth) {
 	board b_cpy = *b_orig;
 	board *b = &b_cpy;
 	evaluation *eval = tt_get(b);
+	if (eval == NULL || m_eq(eval->best, no_move)) {
+		stdout_fprintf(logstr, "info string null or no move in ttable");
+		return;
+	}
 	lastbestmove = eval->best;
 	do {
 		char move[6];
@@ -297,7 +301,7 @@ void *timeout_entrypoint(void *time_p) {
 	pthread_mutex_unlock(&tt_writing_lock);
 	char buffer[6];
 	if (m_eq(lastbestmove, no_move)) { // Panic! The search wasn't long enough to complete depth one. Choose a random legal move.
-		stdout_fprintf(logstr, "info string search depth 1 timeout; choosing random move\n");
+		stdout_fprintf(logstr, "info string search depth 1 timeout (or badly-timed tt_clear); choosing random move\n");
 		int c;
 		move *moves = board_moves(&uciboard, &c, false);
 		lastbestmove = moves[0];

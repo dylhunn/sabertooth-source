@@ -25,8 +25,8 @@ static const coord bqr = (coord) {0, 7};
 static const coord bkr = (coord) {7, 7};
 // Because negating INT_MIN has awful consequences
 // Ensure these are always the same number, so negating scores doesn't produce unpredictable results
-static const int POS_INFINITY = 999999;
-static const int NEG_INFINITY = -999999;
+static const int POS_INFINITY = 9999;
+static const int NEG_INFINITY = -9999;
 
 /*
  * Search settings

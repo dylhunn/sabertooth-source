@@ -147,7 +147,7 @@ int castle_moves(board *b, coord c, move *list) {
 	for (int i = 5; i <= 6; i++) { // rely on the search to avoid moving into check
 		if (!p_eq(b->b[i][row], no_piece) || in_check(b, i, row, b->black_to_move)) {
 			k_r_path_clear = false;
-			//break;
+			break;
 		}
 	}
 	for (int i = 3; i >= 2; i--) {
@@ -156,6 +156,8 @@ int castle_moves(board *b, coord c, move *list) {
 			break;
 		}
 	}
+	// There also might be a Queen's knight; not validated above because this square may be in check
+	if (!p_eq(b->b[1][row], no_piece)) q_r_path_clear = false;
 	if (k_r_path_clear) {
 		if (isWhite && b->castle_rights_wk) {
 			if (add_move((move){c, (coord){6, row}, no_piece, no_piece, K}, list + added, false)) added++;

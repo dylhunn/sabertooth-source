@@ -20,7 +20,7 @@ extern const piece no_piece;
 extern const move no_move;
 
 #define ENGINE_NAME "Sabertooth"
-#define ENGINE_VERSION "0.1"
+#define ENGINE_VERSION "0.1.1 alpha"
 #define AUTHOR_NAME "Dylan D. Hunn"
 
 extern const char *engine_name;
