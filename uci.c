@@ -26,7 +26,7 @@ void enter_uci() {
 }
 
 void process_command(char *command_str) {
-	fprintf(logstr, "Received command: %s\n", command_str);
+	stdout_fprintf(logstr, "Received command: %s\n", command_str);
 	fflush(logstr);
 	char *first_token = strtok(command_str, token_sep);
 
@@ -166,7 +166,6 @@ void process_command(char *command_str) {
 		} else if (pthread_create(&timer_worker, NULL, &timeout_entrypoint, arg) != 0) {
 			stdout_fprintf(logstr, "info string failed to spawn timed search thread\n");
 		}
-		free(arg);
 		
 	} else if (strcmp(first_token, "stop") == 0) { // end the search
 		kill_workers(true);
@@ -217,23 +216,33 @@ void read_from_fen(board *b) {
 	if (b->black_to_move) ply++;
 	b->last_move_ply = ply;
 	b->true_game_ply_clock = ply;
-
 	b->hash = tt_hash_position(b);
+	for (int i = 0; i < 8; i++) {
+		for (int j = 0; j < 8; j++) {
+			if (b->b[i][j].type == 'K') {
+				if (b->b[i][j].white) b->white_king = (coord){i, j};
+				else b->black_king = (coord){i, j};
+			}
+		}
+	}
 }
 
 // Kill a search, if it is running, and print the bestmove.
 void kill_workers(bool print) {
 	if (!search_running) return;
-	pthread_mutex_lock(&tt_writing_lock);
+	search_terminate_requested = true;
 	if (pthread_cancel(timer_worker) != 0) {
 		stdout_fprintf(logstr, "info string failed to terminate timer thread (perhaps it has already been killed?) \n");
 	}
-	if (pthread_cancel(search_worker) != 0) {
-		stdout_fprintf(logstr, "info string failed to terminate search thread (perhaps it has already been killed?) \n");
-	}
-	pthread_mutex_unlock(&tt_writing_lock);
 	char buffer[6];
-	if (print) stdout_fprintf(logstr, "bestmove %s\n", move_to_string(tt_get(&uciboard)->best, buffer));
+	if (print) {
+		move selected_move = tt_get(&uciboard)->best;
+		if (!m_eq(last_tt_pv_move, selected_move)) {
+			stdout_fprintf(logstr, "info string Warning: previous pv move and tt move (%s) don't match! Using the former.\n", move_to_string(selected_move, buffer));
+			selected_move = last_tt_pv_move;
+		}
+		stdout_fprintf(logstr, "bestmove %s\n", move_to_string(selected_move, buffer));
+	}
 	search_running = false;
 }
 
@@ -245,12 +254,13 @@ void print_pv(board *b_orig, int maxdepth) {
 	board b_cpy = *b_orig;
 	board *b = &b_cpy;
 	evaluation *eval = tt_get(b);
+	last_tt_pv_move = eval->best;
 	if (eval == NULL || m_eq(eval->best, no_move)) {
 		stdout_fprintf(logstr, "info string null or no move in ttable");
 		return;
 	}
-	lastbestmove = eval->best;
 	do {
+		if (search_terminate_requested) return;
 		char move[6];
 		stdout_fprintf(logstr, "%s ", move_to_string(eval->best, move));
 		apply(b, eval->best);
@@ -263,16 +273,18 @@ void print_pv(board *b_orig, int maxdepth) {
 // This function will perform iterative deepening forever (or until its thread is killed).
 void *search_entrypoint(void *param) { 
 	search_running = true;
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	search_terminate_requested = false; // Reset termination request
 	board working_copy = uciboard; // killing the worker thread might destroy our board
 	for (int i = 1; i <= iterative_deepening_cutoff; i++) { 
 		clear_stats();
 		search(&working_copy, i);
+		if (search_terminate_requested) break;
 		evaluation *eval = tt_get(&working_copy);
 		uint64_t nodes = sstats.nodes_searched + sstats.qnodes_searched;
 		double nps = (((double) nodes) / (((double) sstats.time) / 1000));
 		stdout_fprintf(logstr, "info depth %d time %d nodes %llu score cp %d hashfull %f nps %.0f pv ", 
 			sstats.depth, (int) sstats.time, nodes, eval->score, tt_load() * 10, nps);
+		if (search_terminate_requested) printf("info string (terminated -- incomplete search)\n");
 		print_pv(&working_copy, pv_printing_cutoff);
 		stdout_fprintf(logstr, "\n");
 		fflush(stdout);
@@ -283,7 +295,8 @@ void *search_entrypoint(void *param) {
 // spawns a search worker, then kills it after the elapsed time in ms and prints the bestmove
 void *timeout_entrypoint(void *time_p) {
 	int time = *((int *) time_p);
-	lastbestmove = no_move;
+	free(time_p);
+	move selected_move = no_move;
 	search_running = true;
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	// spawn the worker thread
@@ -294,20 +307,23 @@ void *timeout_entrypoint(void *time_p) {
 	// Wait in microseconds
 	usleep(time * 1000);
 
-	pthread_mutex_lock(&tt_writing_lock);
-	if (pthread_cancel(search_worker) != 0) {
-		stdout_fprintf(logstr, "info string failed to queue search thread termination (perhaps it has already been killed?) \n");
-	}
-	pthread_mutex_unlock(&tt_writing_lock);
+	search_terminate_requested = true;
+	usleep(1000); // Wait 1 ms in case the PV hasn't finished printing
+
 	char buffer[6];
-	if (m_eq(lastbestmove, no_move)) { // Panic! The search wasn't long enough to complete depth one. Choose a random legal move.
+	selected_move = tt_get(&uciboard)->best;
+	if (m_eq(selected_move, no_move)) { // Panic! The search wasn't long enough to complete depth one. Choose a random legal move.
 		stdout_fprintf(logstr, "info string search depth 1 timeout (or badly-timed tt_clear); choosing random move\n");
 		int c;
 		move *moves = board_moves(&uciboard, &c, false);
-		lastbestmove = moves[0];
+		if (c > 0) selected_move = moves[0];
 		free(moves);
 	}
-	stdout_fprintf(logstr, "bestmove %s\n", move_to_string(lastbestmove, buffer));
+	if (!m_eq(last_tt_pv_move, selected_move)) {
+		stdout_fprintf(logstr, "info string Warning: previous pv move and tt move (%s) don't match! Using the former.\n", move_to_string(selected_move, buffer));
+		selected_move = last_tt_pv_move;
+	}
+	stdout_fprintf(logstr, "bestmove %s\n", move_to_string(selected_move, buffer));
 	search_running = false;
 	return NULL;
 }

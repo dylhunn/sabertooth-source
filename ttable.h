@@ -53,10 +53,10 @@ uint64_t tt_pieceval(board *b, coord c);
  */
 
 // starting size of table, and whether expansion is allowed
-#define TT_MEGABYTES_DEFAULT 500
+#define TT_MEGABYTES_DEFAULT 1000
 extern int tt_megabytes; // Don't set a value here 
 static bool allow_tt_expansion = false;
-extern pthread_mutex_t tt_writing_lock; // To control access
+extern bool search_terminate_requested;
 // Re-hash at 70% load factor
 static const double tt_max_load = .75;
 // Nodes that haven't been accessed in this many moves are ancient and might be removed
@@ -69,5 +69,10 @@ extern uint64_t zobrist_castle_wk;
 extern uint64_t zobrist_castle_bq;
 extern uint64_t zobrist_castle_bk;
 extern uint64_t zobrist_black_to_move;
+
+// Used to keep track of when the table will actually be cleared
+static int tt_clear_scheduled_on_move = -1;
+static bool tt_clear_scheduled = false;
+
 
 #endif

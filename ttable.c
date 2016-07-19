@@ -23,7 +23,7 @@ static uint64_t tt_rehash_count; // When to perform a rehash; computed based on 
 static bool is_initialized = false;
 
 // To prevent the search worker from being killed while writing to the table
-pthread_mutex_t tt_writing_lock = PTHREAD_MUTEX_INITIALIZER;
+bool search_terminate_requested = false;
 
 // The index of a given board coordinate in the Zobrist table
 static inline int square_code(coord c) {
@@ -47,7 +47,6 @@ uint64_t get_tt_size() {
 // Invoke to prepare transposition table
 void tt_init(void) {
 	// First, compute size from memory use
-	pthread_mutex_lock(&tt_writing_lock);
 	const uint64_t bytes_in_mb = 1000000;
 	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / (sizeof(evaluation) + sizeof(uint64_t))));
 	uint64_t check_mb_size = (uint64_t) ((double) tt_size * (sizeof(evaluation) + sizeof(uint64_t))) / bytes_in_mb;
@@ -77,7 +76,6 @@ void tt_init(void) {
 	zobrist_black_to_move = rand64();
 	atexit(tt_auto_cleanup);
 	is_initialized = true;
-	pthread_mutex_unlock(&tt_writing_lock);
 }
 
 // Automatically called
@@ -86,6 +84,8 @@ void tt_auto_cleanup(void) {
 	/*if (tt_keys) free(tt_keys);
 	tt_keys = NULL;
 	if (tt_values) free(tt_values);
+	tt_values = NULL;
+	if (tt_threads) free(tt_values);
 	tt_values = NULL;*/
 }
 
@@ -111,25 +111,43 @@ uint64_t tt_hash_position(board *b) {
 // Only replaces under certain conditions, to avoid overwriting a principal variation (PV).
 // Overwrites ancient entries.
 void tt_put(board *b, evaluation e) {
-	pthread_mutex_lock(&tt_writing_lock);
 	assert(is_initialized);
-	if (tt_count >= tt_rehash_count) {
+
+	// If we wanted to clear on the next move
+	if (tt_clear_scheduled && (b->true_game_ply_clock != tt_clear_scheduled_on_move)) {
+		tt_clear();
+		tt_clear_scheduled = false;
+		stdout_fprintf(logstr, "info string transposition table clear performed.\n");
+	}
+
+	if (tt_count >= tt_rehash_count && !tt_clear_scheduled) { // The ttable is overflowing and no clear is already scheduled
 		if (allow_tt_expansion && !tt_expand()) {
 			stdout_fprintf(logstr, "info string failed to expand transposition table from %llu entries; clearing.\n", tt_count);
-			pthread_mutex_unlock(&tt_writing_lock); // Unlock because clear() will re-lock
 			tt_clear();
 			return;
 		}
 		if (!allow_tt_expansion) {
-			stdout_fprintf(logstr, "info string transposition table filled; clearing\n");
-			pthread_mutex_unlock(&tt_writing_lock); // Unlock because clear() will re-lock
-			tt_clear();
+			stdout_fprintf(logstr, "info string transposition table filled; scheduling a clear\n");
+			tt_clear_scheduled = true;
+			tt_clear_scheduled_on_move = b->true_game_ply_clock;
+		}
+	}
+
+	uint64_t idx = b->hash % tt_size;
+	bool overwriting = false;
+
+	// Because we are going to clear the table regardless, we switch to an "always-overwrite" strategy
+	// Specifically, we overwrite any non-enpty slot. We don't touch empty slots to avoid very long tt_get() operations.
+	// This might overwrite random things and destroy the table or PV, but that's OK - persumably
+	// this is only called at deep depths, and the search() caller should handle the starting position
+	// not being in the table.
+	if (tt_clear_scheduled) {
+		if (tt_keys[idx] != 0) goto skipchecks;
+		else {
 			return;
 		}
 	}
 
-	bool overwriting = false;
-	uint64_t idx = b->hash % tt_size;
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
 		if (b->true_game_ply_clock - tt_values[idx].last_access_move >= remove_at_age) {
 			overwriting = true;
@@ -139,19 +157,18 @@ void tt_put(board *b, evaluation e) {
 	}
 
 	// If it is a new entry, skip the replacement checks
-	if (tt_keys[idx] == 0 || overwriting == true) goto skipchecks;
+	if (tt_keys[idx] == 0 || overwriting) goto skipchecks;
 
+	// TODO did it play better with this commented out?
 	// Never replace exact with inexact, or we could easily lose the PV.
 	if (tt_values[idx].type == exact && e.type != exact) {
 		sstats.ttable_insert_failures++;
-		pthread_mutex_unlock(&tt_writing_lock);
 		return;
 	}
 	// only replace qexact with other qexact or exact
 	if (tt_values[idx].type == qexact) {
 		if (e.type != qexact && e.type != exact) {
 			sstats.ttable_insert_failures++;
-			pthread_mutex_unlock(&tt_writing_lock);
 			return;
 		}
 	}
@@ -162,9 +179,9 @@ void tt_put(board *b, evaluation e) {
 	if (tt_values[idx].type != qexact && e.type == exact) goto skipchecks;
 	// Otherwise, prefer deeper entries; replace if equally deep due to aspiration windows
 	if (e.depth < tt_values[idx].depth) {
-		//sstats.ttable_insert_failures++;
-		pthread_mutex_unlock(&tt_writing_lock);
-		return;
+		//sstats.ttable_insert_failures++; 
+		// TODO keeping the deepest entry aappears to caue blunders? Maybe collisions are responsible? Really odd.
+		//return;
 	}
 	skipchecks:
 	tt_keys[idx] = b->hash;
@@ -173,8 +190,6 @@ void tt_put(board *b, evaluation e) {
 	if (!overwriting) tt_count++;
 	else sstats.ttable_overwrites++;
 	sstats.ttable_inserts++;
-
-	pthread_mutex_unlock(&tt_writing_lock);
 }
 
 // Fetch an entry from the transposition table.
@@ -202,7 +217,7 @@ void tt_clear() {
 
 // Expand the table. This won't be called unless the appropriate setting is activated in the .h file.
 bool tt_expand(void) {
-	pthread_mutex_lock(&tt_writing_lock);
+	assert(false); // TODO this no longer works
 	assert(is_initialized);
 	stdout_fprintf(logstr, "expanding transposition table...\n");
 	uint64_t new_size = tt_size * 2;
@@ -222,7 +237,6 @@ bool tt_expand(void) {
 	tt_values = new_values;
 	tt_size = new_size;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * new_size));
-	pthread_mutex_unlock(&tt_writing_lock);
 	return true;
 }
 

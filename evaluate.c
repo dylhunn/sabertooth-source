@@ -17,11 +17,11 @@ int piece_square_val(piece p, int c, int r);
 
 static int ptable_pawn[64] = {  
    0,  0,  0,  0,  0,  0,  0,  0,
-  20, 21, 22, 22, 22, 22, 21, 20,
+  20, 21, 22, 25, 25, 22, 21, 20,
   10, 10, 20, 20, 20, 20, 10, 10,
    5,  7, 16, 17, 17, 16,  7,  5,
    3,  0, 14, 15, 15, 14,  0,  3,
-   0,  5,  3, 10, 10,  3,  5,  0,
+   0,  4,  3, 10, 10,  3,  4,  0,
    5,  5,  5,  5,  5,  5,  5,  5,
    0,  0,  0,  0,  0,  0,  0,  0
 };
@@ -29,7 +29,7 @@ static int ptable_pawn[64] = {
 static int ptable_knight[64] = {  
    -20,  0,  0,  0,  0,  0,  0,-20,
    -15,  5,  6,  7,  7,  6,  5,-15,
-   -10,  7, 15, 20, 20, 15,  7,-10,
+   -10,  7, 16, 20, 20, 16,  7,-10,
     -5,  7, 15, 30, 30, 15,  7, -5,
     -5,  7, 15, 25, 25, 15,  7, -5,
    -10,  5, 10, 15, 15, 10,  5,-10,
@@ -44,7 +44,7 @@ static int ptable_bishop[64] = {
    0, 10, 20, 30, 30, 20, 10,  0,
    0, 10, 30, 30, 30, 30, 10,  0,
    0, 15, 30, 10, 10, 30, 15,  0,
-   0, 20,  0,  5,  5,  0, 20,  0,
+   0, 22,  0,  5,  5,  0, 22,  0,
    0,  0,  0,  0,  0,  0,  0,  0
 };
 
@@ -67,7 +67,7 @@ static int ptable_queen[64] = {
    0,  0,  0, 10, 10,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
-   0,  0,  0,  5,  0,  0,  0,  0
+   0,  0,  0,  0,  0,  0,  0,  0
 };
 
 static int ptable_king[64] = {  
@@ -91,15 +91,26 @@ int evaluate(board *b) {
 }
 
 int square_by_square(board *b) {
+   uint8_t black_pawns_by_col[8] = {0};
+   uint8_t white_pawns_by_col[8] = {0};
+
 	int eval = 0;
 	for (int c = 0; c < 8; c++) { // cols
 		for (int r = 0; r < 8; r++) { // rows
 			piece p = b->b[c][r];
+         if (p.type == 'P') {
+            if (p.white) white_pawns_by_col[c]++;
+            else white_pawns_by_col[c]++;
+         }
 			if (p_eq(no_piece, p)) continue;
 			eval += piece_val(p);
 			eval += piece_square_val(p, c, r);
 		}
 	}
+   for (int i = 0; i < 8; i++) {
+      if (black_pawns_by_col[i] > 1) eval += doubled_pawn_penalty;
+      if (white_pawns_by_col[i] > 1) eval -= doubled_pawn_penalty;
+   }
 	return eval;
 }
 

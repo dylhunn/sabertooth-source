@@ -32,7 +32,7 @@ move *board_moves(board *b, int *count, bool captures_only) {
 		}
 
 	}
-	// TODO does 
+	// TODO does this need to happen?
 	//moves = realloc(moves, sizeof(move) * ((*count) + 1)); // extra slot for working space
 	return moves;
 }
@@ -342,11 +342,11 @@ bool in_check(board *b, int col, int row, bool by_white) {
 // this is slightly more efficient than in_check
 // precondition: the specified King was NOT already in check
 // TODO This is buggy and needs to be fixed before using
-bool puts_in_check(board *b, move m, bool white_king) {
-	coord king_loc = white_king ? b->white_king : b->black_king;
+bool puts_in_check(board *b, move m, bool black_king) {
+	coord king_loc = black_king ? b->black_king : b->white_king;
 
 	// We can't handle king moves any more efficiently
-	if (at(b, m.to).type == 'K') return in_check(b, king_loc.col, king_loc.row, !white_king);
+	if (at(b, m.to).type == 'K') return in_check(b, king_loc.col, king_loc.row, black_king);
 
 	piece moved_p = at(b, m.to);
 	bool piece_is_white = moved_p.white;
@@ -357,7 +357,7 @@ bool puts_in_check(board *b, move m, bool white_king) {
 	piece assailant = puts_in_check_radiate_helper(b, m.from, king_loc);
 
 	if (p_eq(assailant, no_piece)) goto step2; // No piece along line
-	if (assailant.white == white_king) goto step2; // Friendly piece along line
+	if (assailant.white != black_king) goto step2; // Friendly piece along line
 
 	switch(assailant.type) {
 		case 'B':
@@ -371,13 +371,13 @@ bool puts_in_check(board *b, move m, bool white_king) {
 	step2:
 
 	// did the arrival square put the king in check?
-	if (moved_p.white == white_king) return false; // a teammate cannot check the king
+	if (moved_p.white != black_king) return false; // a teammate cannot check the king
 
 	// direction of radiation for direct check
 	assailant = puts_in_check_radiate_helper(b, m.to, king_loc);
 
 	if (p_eq(assailant, no_piece)) goto step3; // No piece along line
-	if (assailant.white == white_king) goto step3; // Friendly piece along line
+	if (assailant.white != black_king) goto step3; // Friendly piece along line
 
 	switch(assailant.type) {
 		case 'B':
@@ -412,6 +412,7 @@ piece puts_in_check_radiate_helper(board *b, coord square, coord king_loc) {
 	// direction of radiation for check
 	int dx = 0;
 	int dy = 0;
+	if (c_eq(square, king_loc)) return no_piece;
 	// did the coordinate expose the king to discovered or direct attack in its direction?
 	if (square.col == king_loc.col) {
 		dy = (square.row > king_loc.row) ? 1 : -1;

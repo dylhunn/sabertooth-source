@@ -29,8 +29,25 @@ typedef struct move {
 	coord to;
 	piece captured;
 	piece promote_to;
-	castle c; // castle; structure packing
+	int8_t c; // castle; structure packing
 } move;
+
+typedef enum evaltype {
+	upperbound,
+	lowerbound,
+	qupperbound,
+	qlowerbound,
+	exact,
+	qexact
+} evaltype;
+
+typedef struct evaluation {
+	move best;
+	int16_t score;
+	uint16_t last_access_move; // used for age to delete ancient entries; set automatically by the TT
+	int8_t depth;
+	int8_t type; // evaltype; structure packing
+} evaluation;
 
 typedef struct board {
 	piece b[8][8]; // cols then rows
@@ -51,28 +68,9 @@ typedef struct board {
 	// the true ply number of the game, which has no bearing on the current board state
 	// used only for disposing of ancient entries in the transposition table
 	uint16_t true_game_ply_clock;
-
-	int attacked[8][8]; // updated by move generator
 	coord white_king;
 	coord black_king;
 } board;
-
-typedef enum evaltype {
-	upperbound,
-	lowerbound,
-	qupperbound,
-	qlowerbound,
-	exact,
-	qexact
-} evaltype;
-
-typedef struct evaluation {
-	move best;
-	evaltype type; // evaltype; structure packing
-	int score;
-	uint16_t last_access_move; // used for age to delete ancient entries; set automatically by the TT
-	int depth;
-} evaluation;
 
 typedef struct searchstats {
 	int depth; // the depth of the current search
@@ -86,5 +84,15 @@ typedef struct searchstats {
 	uint64_t ttable_misses;
 	uint64_t ttable_overwrites;
 } searchstats;
+
+typedef struct search_worker_thread_args {
+	board *b;
+	int alpha;
+	int beta;
+	int ply;
+	int centiply_extension;
+	bool allow_extensions;
+	bool side_to_move_in_check;
+} search_worker_thread_args;
 
 #endif

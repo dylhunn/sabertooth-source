@@ -38,7 +38,7 @@ bool in_check(board *b, int col, int row, bool by_white);
 // checks if a given move, ALREADY applied, has put the specified color's king in check
 // this is slightly more efficient than in_check
 // precondition: the specified King was not already in check
-bool puts_in_check(board *b, move m, bool white_king);
+bool puts_in_check(board *b, move m, bool black_king);
 
 // The maximum number of moves that can be stored in a move array
 // If any position results in more moves than this, a segfault will occur

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include "settings.h"
 #include "stdbool.h"
 #include "types.h"
 #include "ttable.h"
@@ -19,16 +20,11 @@
 extern const piece no_piece;
 extern const move no_move;
 
-#define ENGINE_NAME "Sabertooth"
-#define ENGINE_VERSION "0.1.1 alpha"
-#define AUTHOR_NAME "Dylan D. Hunn"
-
 extern const char *engine_name;
 extern const char *engine_version;
 extern const char *author_name;
 
 extern FILE *logstr;
-static bool use_log_file = true;
 
 static inline bool p_eq(piece a, piece b) {
 	return a.type == b.type && a.white == b.white;

@@ -7,28 +7,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "settings.h"
 #include "types.h"
 #include "util.h"
 #include "movegen.h"
 #include "search.h"
 #include "ttable.h"
 
-#define max_input_string_length 2000
-
-// Cutoff is necessary to prevent very deep sarches in the event of mate
-#define iterative_deepening_cutoff 40 
-
-// Cutoff is nessary to avoid printing cyclic PVs forever
-#define pv_printing_cutoff 40
-
 static const char *token_sep = " \t\n"; // characters that can separate tokens in a UCI input string
 
 static board uciboard; // the last known board loaded with the position command
 
 static bool search_running = false;
-
-static move lastbestmove;
-
+static move last_tt_pv_move;
 extern pthread_t search_worker;
 extern pthread_t timer_worker;
 

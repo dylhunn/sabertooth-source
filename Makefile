@@ -11,7 +11,7 @@ clean:
 fianchetto.o: fianchetto.c
 ttable.o: ttable.h ttable.c
 movegen.o: movegen.h movegen.c
-util.o: util.h util.c
+util.o: settings.h util.h util.c
 evaluate.o: evaluate.h evaluate.c
 search.o: search.h search.c
 uci.o: uci.h uci.c

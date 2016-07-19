@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include "settings.h"
+#include "ttable.h"
 #include "types.h"
 #include "util.h"
 #include "evaluate.h"
@@ -29,17 +31,6 @@ static const int POS_INFINITY = 9999;
 static const int NEG_INFINITY = -9999;
 
 /*
- * Search settings
- */
-static const bool use_mtd_f = true; // Use MTD-F optimization on top of alpha-beta search; use_ttable must also be on
-static const int quiesce_ply_cutoff = 45; // Quiescence search will cut off after this many plies
-static const bool mvvlva = true; // Capture hueristic
-static const bool use_qsearch = true; // Quiescence search
-static const bool clear_tt_every_move = false; // Clear the transposition table after each search completes
-static const bool use_ttable = true; // Should the transposition table be used to generate search cutoffs?
-static const bool use_tt_move_hueristic = true; // Use the last move stored in the TT as a "best-first" hueristic
-
-/*
  * Search statistics
  */
  extern searchstats sstats;
@@ -52,7 +43,7 @@ void clear_stats(void);
 // Computes how much time should be used to search the next move, all units in ms
 int time_use(board *b, int time_left, int increment, int movestogo);
 // Perform a search and store the results in the transposition table
-int search(board *b, int ply);
+void search(board *b, int ply);
 // Apply and unapply a move to the board, updating the hash
 void apply(board *b, move m);
 void unapply(board *b, move m);

@@ -5,7 +5,9 @@ searchstats sstats;
 
 // Local functions
 int mtd_f(board *b, int ply);
-int abq(board *b, int alpha, int beta, int ply);
+int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check);
+void *abq_multithread_entrypoint(void *param);
+int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check);
 int relative_evaluation(board *b);
 int capture_move_comparator(const board *board, const move *a, const move *b);
 
@@ -26,13 +28,13 @@ void clear_stats() {
 // Some parameters might be -1 if they do not apply
 // TODO - this algorithm is naive
 int time_use(board *b, int time_left, int increment, int movestogo) {
-	if (time_left < 5000) return time_left / 10; // always freak out if we are almost out of time
-	// Assume the game is 45 moves long, but never use more than 1/5th of the remaining time
-	int moves_left_guess = (movestogo == -1) ? max(5, 45 - b->last_move_ply) : movestogo;
+	if (time_left <= 0) return 100; // Oops!
+	// Assume the game is 70 moves long, but never use more than 1/10th of the remaining time
+	int moves_left_guess = (movestogo == -1) ? max(10, 70 - b->last_move_ply) : movestogo + 1;
 	return time_left / moves_left_guess;
 }
 
-int search(board *b, int ply) {
+void search(board *b, int ply) {
 	clear_stats(); // Stats for search
 	sstats.depth = ply;
 	// Start timer for the search
@@ -40,13 +42,16 @@ int search(board *b, int ply) {
    	gettimeofday(&t1, NULL);
    	int result;
 	if (use_mtd_f) result = mtd_f(b, ply);
-	else result = abq(b, NEG_INFINITY, POS_INFINITY, ply);
+	else {
+		coord king_loc = b->black_to_move ? b->black_king : b->white_king;
+		bool side_to_move_in_check = in_check(b, king_loc.col, king_loc.row, b->black_to_move);
+		result = abq_multithread(b, NEG_INFINITY, POS_INFINITY, ply, 0, true, side_to_move_in_check);
+	}
 	gettimeofday(&t2, NULL);
 	// Compute and print the elapsed time in millisec
 	double search_millisec = (t2.tv_sec - t1.tv_sec) * 1000.0; // sec to ms
 	search_millisec += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
 	sstats.time = search_millisec;
-	return result;
 }
 
 int mtd_f(board *board, int ply) {
@@ -59,20 +64,52 @@ int mtd_f(board *board, int ply) {
 	}
 	int upper_bound = POS_INFINITY;
 	int lower_bound = NEG_INFINITY;
+	coord king_loc = board->black_to_move ? board->black_king : board->white_king;
+	bool side_to_move_in_check = in_check(board, king_loc.col, king_loc.row, board->black_to_move);
 	while (lower_bound < upper_bound) {
+		if (search_terminate_requested) return 0;
 		int beta;
 		if (g == lower_bound) beta = g+1;
 		else beta = g;
-		g = abq(board, beta-1, beta, ply);
+		g = abq_multithread(board, beta-1, beta, ply, 0, true, side_to_move_in_check);
 		if (g < beta) upper_bound = g;
 		else lower_bound = g;
 	}
 	return g;
 }
 
+int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check) {
+	pthread_t workers[num_search_threads];
+	for (int i = 0; i < num_search_threads; i++) {
+		search_worker_thread_args *args = malloc(sizeof(search_worker_thread_args));
+		search_worker_thread_args param_list = {.b = b, .alpha = alpha, .beta = beta, .ply = ply, 
+			.centiply_extension = centiply_extension, .allow_extensions = allow_extensions, 
+			.side_to_move_in_check = side_to_move_in_check};
+		*args = param_list;
+		if (pthread_create(&workers[i], NULL, abq_multithread_entrypoint, args)) {
+			stdout_fprintf(logstr, "info string error creating worker thread\n");
+			free(args);
+		}
+	}
+	// Wait for the workers to finish
+	void *return_val;
+	for (int i = 0; i < num_search_threads; i++) {
+       pthread_join(workers[i], &return_val);
+	}
+	return (int)return_val;
+}
+
+void *abq_multithread_entrypoint(void *param) {
+	search_worker_thread_args *args = param;
+	abq(args->b, args->alpha, args->beta, args->ply, args->centiply_extension, args->allow_extensions, args->side_to_move_in_check);
+	free(param);
+	return NULL;
+}
+
 // Unified alpha-beta and quiescence search
-int abq(board *b, int alpha, int beta, int ply) {
-	pthread_testcancel(); // To allow search worker thread termination
+int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check) {
+	if (search_terminate_requested) return 0; // Check for search termination
+
 	int alpha_orig = alpha; // For use in later TT storage
 	bool quiescence = (ply <= 0);
 
@@ -103,16 +140,18 @@ int abq(board *b, int alpha, int beta, int ply) {
 		return relative_evaluation(b);
 	}
 
+	int quiescence_stand_pat;
 	// Allow the quiescence search to generate cutoffs
 	if (quiescence) {
-		int score = relative_evaluation(b);
-		alpha = max(alpha, score);
+		quiescence_stand_pat = relative_evaluation(b);
+		alpha = max(alpha, quiescence_stand_pat);
 		if (alpha >= beta) {
 			free(moves);
-			return score;
+			return quiescence_stand_pat;
 		}
 	} else if (stored != NULL && use_tt_move_hueristic) {
-	// For non-quiescence search, use the TT entry as a hueristic
+		assert(is_legal_move(b, stored->best)); // TODO
+		// For non-quiescence search, use the TT entry as a hueristic
 		moves[num_available_moves] = stored->best;
 		num_available_moves++;
 	}
@@ -124,18 +163,49 @@ int abq(board *b, int alpha, int beta, int ply) {
 	// Search hueristic: sort exchanges using MVV-LVA
 	if (quiescence && mvvlva) nlopt_qsort_r(moves, num_available_moves, sizeof(move), b, &capture_move_comparator);
 
+	// Search extensions
+	bool no_more_extensions = false;
+
+	// Extend the search if we are in check
+	//coord king_loc = b->black_to_move ? b->black_king : b->white_king;
+	bool currently_in_check = side_to_move_in_check; //in_check(b, king_loc.col, king_loc.row, b->black_to_move);
+	if (check_extend && currently_in_check && ply <= check_extend_threshold && !quiescence && allow_extensions) { // only extend in shallow non-quiescence situations 
+		centiply_extension += check_extension_centiply;
+		no_more_extensions = true;
+	}
+
+	// Process any extensions
+	if (allow_extensions && centiply_extension >= 100) {
+		centiply_extension -= 100;
+		ply += 1;
+	} else if (allow_extensions && centiply_extension <= -100) {
+		centiply_extension += 100;
+		ply -= 1;
+	}
+
+	if (no_more_extensions) allow_extensions = false; // Only allow one check extension
+
 	move best_move_yet = no_move;
 	int best_score_yet = NEG_INFINITY; 
 	int num_moves_actually_examined = 0; // We might end up in checkmate
 	for (int i = num_available_moves - 1; i >= 0; i--) { // Iterate backwards to match MVV-LVA sort order
 		apply(b, moves[i]);
+		bool we_moved_into_check;
+		// Choose the more efficient version if possible
+		// If we were already in check, we need to do the expensive search
+		if (side_to_move_in_check) {
+			coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
+			we_moved_into_check = in_check(b, king_loc.col, king_loc.row, !(b->black_to_move));
+		} else we_moved_into_check = puts_in_check(b, moves[i], !b->black_to_move);
 		// Never move into check
-		coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
-		if (in_check(b, king_loc.col, king_loc.row, !(b->black_to_move))) {
+		if (we_moved_into_check) {
 			unapply(b, moves[i]);
 			continue;
 		}
-		int score = -abq(b, -beta, -alpha, ply - 1);
+		bool opponent_in_check = puts_in_check(b, moves[i], b->black_to_move);
+		/*coord opp_king_loc = b->black_to_move ? b->black_king : b->white_king;
+		bool opponent_in_check = in_check(b, opp_king_loc.col, opp_king_loc.row, (b->black_to_move));*/
+		int score = -abq(b, -beta, -alpha, ply - 1, centiply_extension, allow_extensions, opponent_in_check);
 		num_moves_actually_examined++;
 		unapply(b, moves[i]);
 		if (score > best_score_yet) {
@@ -151,12 +221,15 @@ int abq(board *b, int alpha, int beta, int ply) {
 	// This means checkmate or stalemate in normal search
 	// It might mean no captures are available in quiescence search
 	if (num_moves_actually_examined == 0) {
-		if (quiescence) return relative_evaluation(b); // TODO: qsearch doesn't understand stalemate or checkmate
-		coord king_loc = b->black_to_move ? b->black_king : b->white_king;
+		if (quiescence) return quiescence_stand_pat; // TODO: qsearch doesn't understand stalemate or checkmate
 		// This seems paradoxical, but the +1 is necessary so we pick some move in case of checkmate
-		if (in_check(b, king_loc.col, king_loc.row, b->black_to_move)) return NEG_INFINITY + 1; // checkmate
+		if (currently_in_check) return NEG_INFINITY + 1; // checkmate
 		else return 0; // stalemate
 	}
+
+	if (quiescence && best_score_yet < quiescence_stand_pat) return quiescence_stand_pat; // TODO experimental stand pat
+
+	if (search_terminate_requested) return 0; // Search termination preempts tt_put
 
 	// Record the selected move in the transposition table
 	evaltype type;

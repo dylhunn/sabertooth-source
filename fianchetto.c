@@ -39,6 +39,7 @@ void print_analysis(board *b);
 void iterative_deepen(board *b, int max_depth);
 
 int main(int argc, char* argv[]) {
+	if (always_use_debug_mode) repl();
 	// initilize logging
 	if (use_log_file) {
 		logstr = fopen("ucilog.txt", "a");
@@ -48,7 +49,6 @@ int main(int argc, char* argv[]) {
 		}
 		fprintf(logstr, "Starting log\n");
 	}
-
 	// Should we enter debug mode?
 	for (int i = 0; i < argc; i++) {
 		if(strcmp("-d", argv[i]) == 0) repl();
