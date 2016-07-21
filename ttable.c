@@ -18,6 +18,7 @@ int tt_megabytes = TT_MEGABYTES_DEFAULT;
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
 static pthread_mutex_t *tt_locks = NULL;
+static uint8_t *tt_node_thread_counts = NULL;
 static uint64_t tt_size;
 static uint64_t tt_count = 0;
 static uint64_t tt_rehash_count; // When to perform a rehash; computed based on max_load
@@ -49,13 +50,15 @@ uint64_t get_tt_size() {
 void tt_init(void) {
 	// First, compute size from memory use
 	const uint64_t bytes_in_mb = 1000000;
-	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / (sizeof(evaluation) + sizeof(uint64_t) + sizeof(pthread_mutex_t))));
+	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / 
+		(sizeof(evaluation) + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(pthread_mutex_t))));
 	uint64_t check_mb_size = (uint64_t) ((double) tt_size * (sizeof(evaluation) + sizeof(uint64_t))) / bytes_in_mb;
 	printf("info string initializing ttable with %llu slots for total size %llumb\n", tt_size, check_mb_size);
 
 	if (tt_keys != NULL) free(tt_keys);
 	if (tt_values != NULL) free(tt_values);
 	if (tt_locks != NULL) free(tt_locks);
+	if (tt_node_thread_counts != NULL) free(tt_node_thread_counts);
 	tt_keys = malloc(sizeof(uint64_t) * tt_size);
 	assert(tt_keys != NULL);
 	memset(tt_keys, 0, tt_size * sizeof(uint64_t));
@@ -63,6 +66,9 @@ void tt_init(void) {
 	assert(tt_values != NULL);
 	tt_locks = malloc(sizeof(pthread_mutex_t) * tt_size);
 	assert(tt_locks != NULL);
+	tt_node_thread_counts = malloc(sizeof(uint8_t) * tt_size);
+	memset(tt_node_thread_counts, 0, tt_size * sizeof(uint8_t));
+	assert(tt_node_thread_counts != NULL);
 	tt_count = 0;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * tt_size));
 
@@ -230,6 +236,37 @@ void tt_get(board *b, evaluation *result) {
 void tt_clear() {
 	assert(is_initialized);
 	tt_init();
+}
+
+bool tt_try_to_claim_node(board *b, int *id) {
+	assert(is_initialized);
+	uint64_t idx = b->hash % tt_size;
+	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
+		idx = (idx + 1) % tt_size;
+	}
+	uint8_t zero = 0;
+	uint8_t one = 1;
+	bool success = __sync_bool_compare_and_swap(tt_node_thread_counts + idx, zero, one);
+	if (!success) return false;
+	pthread_mutex_lock(tt_locks + idx);
+	*id = idx;
+}
+
+bool tt_always_claim_node(board *b, int *id) {
+	assert(is_initialized);
+	uint64_t idx = b->hash % tt_size;
+	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
+		idx = (idx + 1) % tt_size;
+	}
+	pthread_mutex_lock(tt_locks + idx);
+	tt_node_thread_counts[idx]++;
+	*id = idx;
+}
+
+// Unclaims a node for a given id.
+void tt_unclaim_node(int id) {
+	tt_node_thread_counts[id]--;
+	pthread_mutex_unlock(tt_locks + id);
 }
 
 // Expand the table. This won't be called unless the appropriate setting is activated in the .h file.

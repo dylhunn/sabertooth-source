@@ -258,7 +258,7 @@ void print_pv(board *b_orig, int maxdepth) {
 	evaluation eval;
 	tt_get(b, &eval);
 	last_tt_pv_move = eval.best;
-	if (!e_eq(eval, no_eval) || m_eq(eval.best, no_move)) {
+	if (e_eq(eval, no_eval) || m_eq(eval.best, no_move)) {
 		stdout_fprintf(logstr, "info string null or no move in ttable");
 		return;
 	}

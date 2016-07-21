@@ -9,13 +9,14 @@
 
 /*
  * Search settings
+ * Some settings use the preprocessor to ensure the optimizer catches them as constants.
  */
 static const bool use_mtd_f = true; // Use MTD-F optimization on top of alpha-beta search; use_ttable must also be on
 static const int quiesce_ply_cutoff = 45; // Quiescence search will cut off after this many plies
-static const bool mvvlva = true; // Capture hueristic
-static const bool use_qsearch = true; // Quiescence search
+#define mvvlva true // Capture hueristic
+#define use_qsearch true // Quiescence search
 static const bool clear_tt_every_move = false; // Clear the transposition table after each search completes
-static const bool use_ttable = true; // Should the transposition table be used to generate search cutoffs?
+#define use_ttable true // Should the transposition table be used to generate search cutoffs?
 static const bool use_tt_move_hueristic = true; // Use the last move stored in the TT as a "best-first" hueristic
 static const bool check_extend = false; // Extend the search by one ply in case of check
 static const int check_extension_centiply = 100; // Centiply to extend in case of check
@@ -23,11 +24,15 @@ static const int check_extend_threshold = 2; // In the final n plies of regular 
 static const bool use_log_file = true;
 static const bool always_use_debug_mode = false;
 static const int num_search_threads = 1; // Parallel search
+static const int frontier_futility_margin = 310;
+static const int prefrontier_futility_margin = 510;
+#define use_futility_pruning true
 
 /*
  * Evaluation settings
  */
 static const int doubled_pawn_penalty = 11; // Evaluation penalties for doubled pawns
+static const int bishop_pair_bonus = 20;
 
 /*
  * Engine settings

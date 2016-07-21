@@ -26,12 +26,32 @@ void clear_stats() {
 
 // Compute the amount of time to spend on the next move
 // Some parameters might be -1 if they do not apply
-// TODO - this algorithm is naive
 int time_use(board *b, int time_left, int increment, int movestogo) {
 	if (time_left <= 0) return 100; // Oops!
+
+	// Algorithm from http://facta.junis.ni.ac.rs/acar/acar200901/acar2009-07.pdf
+	// Calculate the total value of material
+	int mat_value = 0;
+	for (int i = 0; i < 8; i++) {
+		for (int j = 0; j < 8; j++) {
+			if (p_eq(b->b[i][j], no_piece)) continue;
+			switch(b->b[i][j].type) {
+				case 'P': mat_value += 1; break;
+				case 'N': mat_value += 3; break;
+				case 'B': mat_value += 3; break;
+				case 'R': mat_value += 5; break;
+				case 'Q': mat_value += 9; break;
+				default: ;
+			}
+		}
+	}
 	// Assume the game is 70 moves long, but never use more than 1/10th of the remaining time
-	int moves_left_guess = (movestogo == -1) ? max(10, 70 - b->last_move_ply) : movestogo + 1;
-	return time_left / moves_left_guess;
+	int half_moves_left_guess;
+	if (mat_value < 20) half_moves_left_guess = mat_value + 10;
+	else if (mat_value <= 60) half_moves_left_guess = (mat_value * 3 + 176) / 8;
+	else half_moves_left_guess = (mat_value * 5 - 120) / 4;
+	int our_moves_left_guess = max(5, (half_moves_left_guess / 2));
+	return time_left/our_moves_left_guess;
 }
 
 void search(board *b, int ply) {
@@ -116,7 +136,6 @@ int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool all
 	if (search_terminate_requested) return 0; // Check for search termination
 
 	int alpha_orig = alpha; // For use in later TT storage
-	bool quiescence = (ply <= 0);
 
 	// Retrieve the value from the transposition table, if appropriate
 	evaluation stored;
@@ -127,6 +146,15 @@ int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool all
 		else if (stored.type == qupperbound || stored.type == upperbound) beta = min(beta, stored.score);
 		if (alpha >= beta) return stored.score;
 	}
+
+	// Futility pruning: enter quiescence early if the node is futile
+	if (use_futility_pruning && !side_to_move_in_check && ply == 1) {
+		if (relative_evaluation(b) + frontier_futility_margin < alpha) ply = 0;
+	} else if (use_futility_pruning && !side_to_move_in_check && ply == 2) {
+		if (relative_evaluation(b) + prefrontier_futility_margin < alpha) ply = 0;
+	}
+
+	bool quiescence = (ply <= 0);
 
 	// Generate all possible moves for the quiscence search or normal search, and compute the
 	// static evaluation if applicable.
@@ -194,32 +222,43 @@ int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool all
 	move best_move_yet = no_move;
 	int best_score_yet = NEG_INFINITY; 
 	int num_moves_actually_examined = 0; // We might end up in checkmate
-	for (int i = num_available_moves - 1; i >= 0; i--) { // Iterate backwards to match MVV-LVA sort order
-		apply(b, moves[i]);
-		bool we_moved_into_check;
-		// Choose the more efficient version if possible
-		// If we were already in check, we need to do the expensive search
-		if (side_to_move_in_check) {
-			coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
-			we_moved_into_check = in_check(b, king_loc.col, king_loc.row, !(b->black_to_move));
-		} else we_moved_into_check = puts_in_check(b, moves[i], !b->black_to_move);
-		// Never move into check
-		if (we_moved_into_check) {
+	for (int iterations = 0; iterations < 2; iterations++) { // ABDADA iterations
+		for (int i = num_available_moves - 1; i >= 0; i--) { // Iterate backwards to match MVV-LVA sort order
+			int claimed_node_id = -1;
+			if (i != num_available_moves - 1 && iterations == 1) { // Skip redundant young brothers on the first pass
+				if (!tt_try_to_claim_node(b, &claimed_node_id)) continue; // Skip the node if it is already being searched
+			} else tt_always_claim_node(b, &claimed_node_id);
+			apply(b, moves[i]);
+			bool we_moved_into_check;
+			// Choose the more efficient version if possible
+			// If we were already in check, we need to do the expensive search
+			if (side_to_move_in_check) {
+				coord king_loc = b->black_to_move ? b->white_king : b->black_king; // for side that just moved
+				we_moved_into_check = in_check(b, king_loc.col, king_loc.row, !(b->black_to_move));
+			} else we_moved_into_check = puts_in_check(b, moves[i], !b->black_to_move);
+			// Never move into check
+			if (we_moved_into_check) {
+				unapply(b, moves[i]);
+				tt_unclaim_node(claimed_node_id);
+				continue;
+			}
+			bool opponent_in_check = puts_in_check(b, moves[i], b->black_to_move);
+			/*coord opp_king_loc = b->black_to_move ? b->black_king : b->white_king;
+			bool opponent_in_check = in_check(b, opp_king_loc.col, opp_king_loc.row, (b->black_to_move));*/
+			int score = -abq(b, -beta, -alpha, ply - 1, centiply_extension, allow_extensions, opponent_in_check);
+			num_moves_actually_examined++;
 			unapply(b, moves[i]);
-			continue;
+			if (score > best_score_yet) {
+				best_score_yet = score;
+				best_move_yet = moves[i];
+			}
+			alpha = max(alpha, best_score_yet);
+			if (alpha >= beta) {
+				tt_unclaim_node(claimed_node_id);
+				break;
+			}
+			tt_unclaim_node(claimed_node_id);
 		}
-		bool opponent_in_check = puts_in_check(b, moves[i], b->black_to_move);
-		/*coord opp_king_loc = b->black_to_move ? b->black_king : b->white_king;
-		bool opponent_in_check = in_check(b, opp_king_loc.col, opp_king_loc.row, (b->black_to_move));*/
-		int score = -abq(b, -beta, -alpha, ply - 1, centiply_extension, allow_extensions, opponent_in_check);
-		num_moves_actually_examined++;
-		unapply(b, moves[i]);
-		if (score > best_score_yet) {
-			best_score_yet = score;
-			best_move_yet = moves[i];
-		}
-		alpha = max(alpha, best_score_yet);
-		if (alpha >= beta) break;
 	}
 	free(moves); // We are done with the array
 

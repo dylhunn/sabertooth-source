@@ -44,6 +44,15 @@ void tt_get(board *b, evaluation *result);
 // Clears the transposition table (by resetting it).
 void tt_clear(void);
 
+// For parallel search. Marks a node as exclusively belonging to a specific thread.
+// Returns true if the node was claimed, and populates the id.
+bool tt_try_to_claim_node(board *b, int *id);
+
+bool tt_always_claim_node(board *b, int *id);
+
+// Unclaims a node for a given id.
+void tt_unclaim_node(int id);
+
 // Get the Zobrist hash value of a piece.
 uint64_t tt_pieceval(board *b, coord c);
 

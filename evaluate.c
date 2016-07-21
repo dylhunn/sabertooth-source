@@ -67,7 +67,7 @@ static int ptable_queen[64] = {
    0,  0,  0, 10, 10,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
-   0,  0,  0,  0,  0,  0,  0,  0
+   0,  0,  0, 10,  0,  0,  0,  0
 };
 
 static int ptable_king[64] = {  
@@ -78,7 +78,7 @@ static int ptable_king[64] = {
    0,  0,  0, 10, 10,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
    0,  0,  0,  0,  0,  0,  0,  0,
-   0,  0, 20,  0, 10,  0, 20,  0
+   0,  0, 15,  0, 10,  0, 15,  0
 };
 
 // Statically evaluates a board position.
@@ -93,6 +93,8 @@ int evaluate(board *b) {
 int square_by_square(board *b) {
    uint8_t black_pawns_by_col[8] = {0};
    uint8_t white_pawns_by_col[8] = {0};
+   uint8_t black_bishops = 0;
+   uint8_t white_bishops = 0;
 
 	int eval = 0;
 	for (int c = 0; c < 8; c++) { // cols
@@ -101,6 +103,9 @@ int square_by_square(board *b) {
          if (p.type == 'P') {
             if (p.white) white_pawns_by_col[c]++;
             else black_pawns_by_col[c]++;
+         } else if (p.type == 'B') {
+            if (p.white) white_bishops++;
+            else black_bishops++;
          }
 			if (p_eq(no_piece, p)) continue;
 			eval += piece_val(p);
@@ -111,6 +116,8 @@ int square_by_square(board *b) {
       if (black_pawns_by_col[i] > 1) eval += doubled_pawn_penalty;
       if (white_pawns_by_col[i] > 1) eval -= doubled_pawn_penalty;
    }
+   if (black_bishops == 2) eval -= bishop_pair_bonus;
+   if (white_bishops == 2) eval += bishop_pair_bonus;
 	return eval;
 }
 
@@ -119,7 +126,7 @@ int piece_val(piece p) {
 	switch (p.type) {
 		case 'P': piece_val = 100; break;
 		case 'N': piece_val = 320; break;
-		case 'B': piece_val = 330; break;
+		case 'B': piece_val = 325; break;
 		case 'R': piece_val = 500; break;
 		case 'Q': piece_val = 900; break;
 		case 'K': piece_val = 30000; break;
