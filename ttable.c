@@ -244,15 +244,20 @@ bool tt_try_to_claim_node(board *b, int *id) {
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
 		idx = (idx + 1) % tt_size;
 	}
-	uint8_t zero = 0;
-	uint8_t one = 1;
-	bool success = __sync_bool_compare_and_swap(tt_node_thread_counts + idx, zero, one);
-	if (!success) return false;
 	pthread_mutex_lock(tt_locks + idx);
+	const uint8_t zero = 0;
+	const uint8_t one = 1;
+	//bool success = __sync_bool_compare_and_swap(tt_node_thread_counts + idx, zero, one);
+	if (tt_node_thread_counts[idx] != 0) {
+		pthread_mutex_unlock(tt_locks + idx);
+		return false;
+	}
+	tt_node_thread_counts[idx]++;
 	*id = idx;
+	return true;
 }
 
-bool tt_always_claim_node(board *b, int *id) {
+void tt_always_claim_node(board *b, int *id) {
 	assert(is_initialized);
 	uint64_t idx = b->hash % tt_size;
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {

@@ -48,7 +48,7 @@ void tt_clear(void);
 // Returns true if the node was claimed, and populates the id.
 bool tt_try_to_claim_node(board *b, int *id);
 
-bool tt_always_claim_node(board *b, int *id);
+void tt_always_claim_node(board *b, int *id);
 
 // Unclaims a node for a given id.
 void tt_unclaim_node(int id);
