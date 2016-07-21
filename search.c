@@ -56,8 +56,9 @@ void search(board *b, int ply) {
 
 int mtd_f(board *board, int ply) {
 	int g; // First guess of evaluation
-	evaluation *stored = tt_get(board); // Use last pass in Transposition Table
-	if (stored != NULL) g = stored->score; // If not present, use static evaluation as guess
+	evaluation stored;
+	tt_get(board, &stored); // Use last pass in Transposition Table
+	if (!e_eq(stored, no_eval)) g = stored.score; // If not present, use static evaluation as guess
 	else {
 		g = evaluate(board);
 		if (board->black_to_move) g = -g;
@@ -82,12 +83,15 @@ int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extensi
 	pthread_t workers[num_search_threads];
 	for (int i = 0; i < num_search_threads; i++) {
 		search_worker_thread_args *args = malloc(sizeof(search_worker_thread_args));
-		search_worker_thread_args param_list = {.b = b, .alpha = alpha, .beta = beta, .ply = ply, 
+		board *new_board = malloc(sizeof(board)); // Every worker gets its own board
+		*new_board = *b;
+		search_worker_thread_args param_list = {.b = new_board, .alpha = alpha, .beta = beta, .ply = ply, 
 			.centiply_extension = centiply_extension, .allow_extensions = allow_extensions, 
 			.side_to_move_in_check = side_to_move_in_check};
 		*args = param_list;
 		if (pthread_create(&workers[i], NULL, abq_multithread_entrypoint, args)) {
 			stdout_fprintf(logstr, "info string error creating worker thread\n");
+			free(new_board);
 			free(args);
 		}
 	}
@@ -101,9 +105,10 @@ int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extensi
 
 void *abq_multithread_entrypoint(void *param) {
 	search_worker_thread_args *args = param;
-	abq(args->b, args->alpha, args->beta, args->ply, args->centiply_extension, args->allow_extensions, args->side_to_move_in_check);
+	int res = abq(args->b, args->alpha, args->beta, args->ply, args->centiply_extension, args->allow_extensions, args->side_to_move_in_check);
+	free(args->b);
 	free(param);
-	return NULL;
+	return res;
 }
 
 // Unified alpha-beta and quiescence search
@@ -114,12 +119,13 @@ int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool all
 	bool quiescence = (ply <= 0);
 
 	// Retrieve the value from the transposition table, if appropriate
-	evaluation *stored = tt_get(b);
-	if (stored != NULL && stored->depth >= ply && use_ttable) {
-		if (stored->type == qexact || stored->type == exact) return stored->score;
-		if (stored->type == qlowerbound || stored->type == lowerbound) alpha = max(alpha, stored->score);
-		else if (stored->type == qupperbound || stored->type == upperbound) beta = min(beta, stored->score);
-		if (alpha >= beta) return stored->score;
+	evaluation stored;
+	tt_get(b, &stored);
+	if (!e_eq(stored, no_eval) && stored.depth >= ply && use_ttable) {
+		if (stored.type == qexact || stored.type == exact) return stored.score;
+		if (stored.type == qlowerbound || stored.type == lowerbound) alpha = max(alpha, stored.score);
+		else if (stored.type == qupperbound || stored.type == upperbound) beta = min(beta, stored.score);
+		if (alpha >= beta) return stored.score;
 	}
 
 	// Generate all possible moves for the quiscence search or normal search, and compute the
@@ -149,10 +155,10 @@ int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool all
 			free(moves);
 			return quiescence_stand_pat;
 		}
-	} else if (stored != NULL && use_tt_move_hueristic) {
-		assert(is_legal_move(b, stored->best)); // TODO
+	} else if (!e_eq(stored, no_eval) && use_tt_move_hueristic) {
+		assert(is_legal_move(b, stored.best)); // TODO
 		// For non-quiescence search, use the TT entry as a hueristic
-		moves[num_available_moves] = stored->best;
+		moves[num_available_moves] = stored.best;
 		num_available_moves++;
 	}
 

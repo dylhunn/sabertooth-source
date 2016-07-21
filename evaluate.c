@@ -100,7 +100,7 @@ int square_by_square(board *b) {
 			piece p = b->b[c][r];
          if (p.type == 'P') {
             if (p.white) white_pawns_by_col[c]++;
-            else white_pawns_by_col[c]++;
+            else black_pawns_by_col[c]++;
          }
 			if (p_eq(no_piece, p)) continue;
 			eval += piece_val(p);

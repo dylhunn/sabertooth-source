@@ -1,7 +1,8 @@
 #include "util.h"
 
 const piece no_piece = NO_PIECE;
-const move no_move = {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE, N};
+const move no_move = NO_MOVE;
+const evaluation no_eval = {NO_MOVE, 0, 0 , 0, 0};
 
 const char *engine_name = ENGINE_NAME;
 const char *engine_version = ENGINE_VERSION;

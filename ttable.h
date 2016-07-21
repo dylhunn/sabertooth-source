@@ -37,10 +37,9 @@ uint64_t tt_hash_position(board *b);
 // Add or update a board in the transposition table.
 void tt_put(board *b, evaluation e);
 
-// Fetch an evaluation from the table. Returns NULL if not found.
-// Do not write to this pointer. This pointer may expire after
-// performing another tt_put(), and using it then has undefined behavior.
-evaluation *tt_get(board *b);
+// Fetch an evaluation from the table. Populates with no_eval if not found.
+// This pointer does not actually point into the table.
+void tt_get(board *b, evaluation *result);
 
 // Clears the transposition table (by resetting it).
 void tt_clear(void);

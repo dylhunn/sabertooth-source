@@ -17,6 +17,7 @@ int tt_megabytes = TT_MEGABYTES_DEFAULT;
 // Table data
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
+static pthread_mutex_t *tt_locks = NULL;
 static uint64_t tt_size;
 static uint64_t tt_count = 0;
 static uint64_t tt_rehash_count; // When to perform a rehash; computed based on max_load
@@ -48,19 +49,26 @@ uint64_t get_tt_size() {
 void tt_init(void) {
 	// First, compute size from memory use
 	const uint64_t bytes_in_mb = 1000000;
-	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / (sizeof(evaluation) + sizeof(uint64_t))));
+	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / (sizeof(evaluation) + sizeof(uint64_t) + sizeof(pthread_mutex_t))));
 	uint64_t check_mb_size = (uint64_t) ((double) tt_size * (sizeof(evaluation) + sizeof(uint64_t))) / bytes_in_mb;
 	printf("info string initializing ttable with %llu slots for total size %llumb\n", tt_size, check_mb_size);
 
 	if (tt_keys != NULL) free(tt_keys);
 	if (tt_values != NULL) free(tt_values);
+	if (tt_locks != NULL) free(tt_locks);
 	tt_keys = malloc(sizeof(uint64_t) * tt_size);
 	assert(tt_keys != NULL);
 	memset(tt_keys, 0, tt_size * sizeof(uint64_t));
 	tt_values = malloc(sizeof(evaluation) * tt_size);
 	assert(tt_values != NULL);
+	tt_locks = malloc(sizeof(pthread_mutex_t) * tt_size);
+	assert(tt_locks != NULL);
 	tt_count = 0;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * tt_size));
+
+	for (int i = 0; i < tt_size; i++) {
+		pthread_mutex_init(tt_locks + i, NULL);
+	}
 
 	// Populate Zobrist data
 	srand((unsigned int) time(NULL));
@@ -138,7 +146,7 @@ void tt_put(board *b, evaluation e) {
 
 	// Because we are going to clear the table regardless, we switch to an "always-overwrite" strategy
 	// Specifically, we overwrite any non-enpty slot. We don't touch empty slots to avoid very long tt_get() operations.
-	// This might overwrite random things and destroy the table or PV, but that's OK - persumably
+	// This might overwrite random things and destroy the table or PV, but that's OK - presumably
 	// this is only called at deep depths, and the search() caller should handle the starting position
 	// not being in the table.
 	if (tt_clear_scheduled) {
@@ -156,6 +164,9 @@ void tt_put(board *b, evaluation e) {
 		idx = (idx + 1) % tt_size;
 	}
 
+	// We found our entry; lock it
+	pthread_mutex_lock(tt_locks + idx);
+
 	// If it is a new entry, skip the replacement checks
 	if (tt_keys[idx] == 0 || overwriting) goto skipchecks;
 
@@ -163,12 +174,14 @@ void tt_put(board *b, evaluation e) {
 	// Never replace exact with inexact, or we could easily lose the PV.
 	if (tt_values[idx].type == exact && e.type != exact) {
 		sstats.ttable_insert_failures++;
+		pthread_mutex_unlock(tt_locks + idx);
 		return;
 	}
 	// only replace qexact with other qexact or exact
 	if (tt_values[idx].type == qexact) {
 		if (e.type != qexact && e.type != exact) {
 			sstats.ttable_insert_failures++;
+			pthread_mutex_unlock(tt_locks + idx);
 			return;
 		}
 	}
@@ -181,20 +194,21 @@ void tt_put(board *b, evaluation e) {
 	if (e.depth < tt_values[idx].depth) {
 		//sstats.ttable_insert_failures++; 
 		// TODO keeping the deepest entry aappears to caue blunders? Maybe collisions are responsible? Really odd.
+		//pthread_mutex_unlock(tt_locks + idx);
 		//return;
 	}
 	skipchecks:
-	tt_keys[idx] = b->hash;
 	e.last_access_move = b->true_game_ply_clock;
 	tt_values[idx] = e;
 	if (!overwriting) tt_count++;
 	else sstats.ttable_overwrites++;
 	sstats.ttable_inserts++;
+	tt_keys[idx] = b->hash; // Write the key at the end so tt_get will never read an incomplete entry
+	pthread_mutex_unlock(tt_locks + idx);
 }
 
 // Fetch an entry from the transposition table.
-// Returns NULL if entry is not found.
-evaluation *tt_get(board *b) {
+void tt_get(board *b, evaluation *result) {
 	assert(is_initialized);
 	uint64_t idx = b->hash % tt_size;
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
@@ -202,11 +216,14 @@ evaluation *tt_get(board *b) {
 	}
 	if (tt_keys[idx] == 0) {
 		sstats.ttable_misses++;
-		return NULL;
+		*result = no_eval;
+		return;
 	}
+	pthread_mutex_lock(tt_locks + idx);
 	tt_values[idx].last_access_move = b->true_game_ply_clock;
 	sstats.ttable_hits++;
-	return tt_values + idx;
+	*result = tt_values[idx];
+	pthread_mutex_unlock(tt_locks + idx);
 }
 
 // Clear the transposition table (by resetting it).

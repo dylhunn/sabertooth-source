@@ -11,6 +11,7 @@
 
 #define NO_COORD {255, 255}
 #define NO_PIECE {'0', false}
+#define NO_MOVE {NO_COORD, NO_COORD, NO_PIECE, NO_PIECE, N}
 
 #define cYEL   "\x1B[33m"
 #define cBLU   "\x1B[34m"
@@ -19,6 +20,7 @@
 
 extern const piece no_piece;
 extern const move no_move;
+extern const evaluation no_eval;
 
 extern const char *engine_name;
 extern const char *engine_version;
@@ -37,6 +39,11 @@ static inline bool c_eq(coord a, coord b) {
 static inline bool m_eq(move a, move b) {
 	return c_eq(a.from, b.from) && c_eq(a.to, b.to) && p_eq(a.captured, b.captured) 
 		&& p_eq(a.promote_to, b.promote_to) && a.c == b.c;
+}
+
+static inline bool e_eq(evaluation a, evaluation b) {
+	return m_eq(a.best, b.best) && a.score == b.score && a.last_access_move == b.last_access_move 
+		&& a.depth == b.depth && a.type == b.type;
 }
 
 static inline bool in_bounds(coord c) {

@@ -149,23 +149,24 @@ void print_analysis(board *b_orig) {
 	searchstats sstats_stored = sstats;
 	board b_cpy = *b_orig;
 	board *b = &b_cpy;
-	evaluation *eval = tt_get(b);
-	printf("d%d [%+.2f]: ", eval->depth, ((double)eval->score)/100); // Divide centipawn score
-	assert(eval != NULL);
+	evaluation eval;
+	tt_get(b, &eval);
+	printf("d%d [%+.2f]: ", eval.depth, ((double)eval.score)/100); // Divide centipawn score
+	assert(!e_eq(eval, no_eval));
 	int moveno = (b->last_move_ply+2)/2;
 	if (b->black_to_move) {
 		printf("%d...", moveno);
 		moveno++;
 	}
 	do {
-		assert(!m_eq(eval->best, no_move));
+		assert(!m_eq(eval.best, no_move));
 		if (!b->black_to_move) printf("%d.", moveno++);
 		char move[6];
-		if (eval->type == qexact || eval->type == qupperbound || eval->type == qlowerbound) printf("(q)");
-		printf("%s ", move_to_string(eval->best, move));
-		apply(b, eval->best);
-		eval = tt_get(b);
-	} while (eval != NULL && curr_depth-- > 0);
+		if (eval.type == qexact || eval.type == qupperbound || eval.type == qlowerbound) printf("(q)");
+		printf("%s ", move_to_string(eval.best, move));
+		apply(b, eval.best);
+		tt_get(b, &eval);
+	} while (!e_eq(eval, no_eval) && curr_depth-- > 0);
 	double rate = ((double) sstats_stored.nodes_searched + sstats_stored.qnodes_searched) / sstats_stored.time;
 	printf("\n\t(%llu new nodes, %llu new qnodes, %llu qnode aborts, %.0fms, %.0fkN/s)", 
 		sstats_stored.nodes_searched, sstats_stored.qnodes_searched, sstats_stored.qnode_aborts, sstats_stored.time, rate);

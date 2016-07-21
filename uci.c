@@ -236,7 +236,9 @@ void kill_workers(bool print) {
 	}
 	char buffer[6];
 	if (print) {
-		move selected_move = tt_get(&uciboard)->best;
+		evaluation res;
+		tt_get(&uciboard, &res);
+		move selected_move = res.best;
 		if (!m_eq(last_tt_pv_move, selected_move)) {
 			stdout_fprintf(logstr, "info string Warning: previous pv move and tt move (%s) don't match! Using the former.\n", move_to_string(selected_move, buffer));
 			selected_move = last_tt_pv_move;
@@ -253,19 +255,20 @@ void print_pv(board *b_orig, int maxdepth) {
 	int curr_depth = maxdepth; // output depth limit
 	board b_cpy = *b_orig;
 	board *b = &b_cpy;
-	evaluation *eval = tt_get(b);
-	last_tt_pv_move = eval->best;
-	if (eval == NULL || m_eq(eval->best, no_move)) {
+	evaluation eval;
+	tt_get(b, &eval);
+	last_tt_pv_move = eval.best;
+	if (!e_eq(eval, no_eval) || m_eq(eval.best, no_move)) {
 		stdout_fprintf(logstr, "info string null or no move in ttable");
 		return;
 	}
 	do {
 		if (search_terminate_requested) return;
 		char move[6];
-		stdout_fprintf(logstr, "%s ", move_to_string(eval->best, move));
-		apply(b, eval->best);
-		eval = tt_get(b);
-	} while (eval != NULL && !m_eq(eval->best, no_move) && curr_depth-- > 0);
+		stdout_fprintf(logstr, "%s ", move_to_string(eval.best, move));
+		apply(b, eval.best);
+		tt_get(b, &eval);
+	} while (!e_eq(eval, no_eval) && !m_eq(eval.best, no_move) && curr_depth-- > 0);
 }
 
 // TODO - ensure cancellation doesn't call the cleanup function
@@ -279,11 +282,12 @@ void *search_entrypoint(void *param) {
 		clear_stats();
 		search(&working_copy, i);
 		if (search_terminate_requested) break;
-		evaluation *eval = tt_get(&working_copy);
+		evaluation eval;
+		tt_get(&working_copy, &eval);
 		uint64_t nodes = sstats.nodes_searched + sstats.qnodes_searched;
 		double nps = (((double) nodes) / (((double) sstats.time) / 1000));
 		stdout_fprintf(logstr, "info depth %d time %d nodes %llu score cp %d hashfull %f nps %.0f pv ", 
-			sstats.depth, (int) sstats.time, nodes, eval->score, tt_load() * 10, nps);
+			sstats.depth, (int) sstats.time, nodes, eval.score, tt_load() * 10, nps);
 		if (search_terminate_requested) printf("info string (terminated -- incomplete search)\n");
 		print_pv(&working_copy, pv_printing_cutoff);
 		stdout_fprintf(logstr, "\n");
@@ -308,10 +312,13 @@ void *timeout_entrypoint(void *time_p) {
 	usleep(time * 1000);
 
 	search_terminate_requested = true;
-	usleep(1000); // Wait 1 ms in case the PV hasn't finished printing
+	//usleep(1000); // Wait 1 ms in case the PV hasn't finished printing
+	pthread_join(search_worker, NULL);
 
 	char buffer[6];
-	selected_move = tt_get(&uciboard)->best;
+	evaluation eval;
+	tt_get(&uciboard, &eval);
+	selected_move = eval.best;
 	if (m_eq(selected_move, no_move)) { // Panic! The search wasn't long enough to complete depth one. Choose a random legal move.
 		stdout_fprintf(logstr, "info string search depth 1 timeout (or badly-timed tt_clear); choosing random move\n");
 		int c;
