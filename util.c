@@ -45,6 +45,8 @@ void reset_board(board *b) {
 	b->true_game_ply_clock = 0;
 	b->white_king = (coord){4, 0};
 	b->black_king = (coord){4, 7};
+	b->en_passant_pawn_push_col_history = malloc(sizeof(int8_t) * 400); // TODO - leak
+	b->en_passant_pawn_push_col_history[0] = -1;
 }
 
 bool move_arr_contains(move *moves, move move, int arrlen) {

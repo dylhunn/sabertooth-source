@@ -29,7 +29,10 @@ void clear_stats() {
 int time_use(board *b, int time_left, int increment, int movestogo) {
 	if (time_left <= 0) return 100; // Oops!
 
-	// Algorithm from http://facta.junis.ni.ac.rs/acar/acar200901/acar2009-07.pdf
+	// Algorithm for remaining move estimation based on:
+	// http://facta.junis.ni.ac.rs/acar/acar200901/acar2009-07.pdf
+	// Slightly more aggresive time managment because of overhead after search
+
 	// Calculate the total value of material
 	int mat_value = 0;
 	for (int i = 0; i < 8; i++) {
@@ -50,6 +53,7 @@ int time_use(board *b, int time_left, int increment, int movestogo) {
 	if (mat_value < 20) half_moves_left_guess = mat_value + 10;
 	else if (mat_value <= 60) half_moves_left_guess = (mat_value * 3 + 176) / 8;
 	else half_moves_left_guess = (mat_value * 5 - 120) / 4;
+	half_moves_left_guess += 6; // Adjustment for search invocation overhead
 	int our_moves_left_guess = max(5, (half_moves_left_guess / 2));
 	return time_left/our_moves_left_guess;
 }
@@ -222,12 +226,12 @@ int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool all
 	move best_move_yet = no_move;
 	int best_score_yet = NEG_INFINITY; 
 	int num_moves_actually_examined = 0; // We might end up in checkmate
-	for (int iterations = 0; iterations < 2; iterations++) { // ABDADA iterations
+	//for (int iterations = 0; iterations < 2; iterations++) { // ABDADA iterations
 		for (int i = num_available_moves - 1; i >= 0; i--) { // Iterate backwards to match MVV-LVA sort order
-			int claimed_node_id = -1;
+			/*int claimed_node_id = -1;
 			if (i != num_available_moves - 1 && iterations == 1) { // Skip redundant young brothers on the first pass
 				if (!tt_try_to_claim_node(b, &claimed_node_id)) continue; // Skip the node if it is already being searched
-			} else tt_always_claim_node(b, &claimed_node_id);
+			} else tt_always_claim_node(b, &claimed_node_id);*/
 			apply(b, moves[i]);
 			bool we_moved_into_check;
 			// Choose the more efficient version if possible
@@ -239,7 +243,7 @@ int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool all
 			// Never move into check
 			if (we_moved_into_check) {
 				unapply(b, moves[i]);
-				tt_unclaim_node(claimed_node_id);
+				//tt_unclaim_node(claimed_node_id);
 				continue;
 			}
 			bool opponent_in_check = puts_in_check(b, moves[i], b->black_to_move);
@@ -254,12 +258,12 @@ int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool all
 			}
 			alpha = max(alpha, best_score_yet);
 			if (alpha >= beta) {
-				tt_unclaim_node(claimed_node_id);
+				//tt_unclaim_node(claimed_node_id);
 				break;
 			}
-			tt_unclaim_node(claimed_node_id);
+			//tt_unclaim_node(claimed_node_id);
 		}
-	}
+	//}
 	free(moves); // We are done with the array
 
 	// We have no available moves (or captures) that don't leave us in check
@@ -348,9 +352,21 @@ int capture_move_comparator(const board *board, const move *a, const move *b) {
 } 
 
 void apply(board *b, move m) {
+	// Disable the old en passant eligibility for a file
+	if (b->en_passant_pawn_push_col_history[b->last_move_ply] != -1) {
+		b->hash ^= zobrist_en_passant_files[b->en_passant_pawn_push_col_history[b->last_move_ply]];
+	}
+
 	// Information
 	piece moved_piece = at(b, m.from);
-	piece new_piece = p_eq(m.promote_to, no_piece) ? at(b, m.from) : m.promote_to;
+	piece new_piece = p_eq(m.promote_to, no_piece) ? moved_piece : m.promote_to;
+
+	// If the move we will apply is en passant, remove the captured pawn
+	if (m.en_passant_capture) {
+		uint8_t en_passant_capture_row = moved_piece.white ? 4 : 3;
+		coord en_pasant_capture_square = (coord){b->en_passant_pawn_push_col_history[b->last_move_ply], en_passant_capture_row};
+		set(b, en_pasant_capture_square, no_piece);
+	}
 
 	// Transform board and hash
 	b->hash ^= tt_pieceval(b, m.from);
@@ -361,6 +377,14 @@ void apply(board *b, move m) {
 	b->hash ^= zobrist_black_to_move;
 	b->black_to_move = !b->black_to_move;
 	b->last_move_ply++;
+
+	// For en passant
+	b->en_passant_pawn_push_col_history[b->last_move_ply] = -1;
+	if (at(b, m.to).type == 'P' && abs(m.to.row - m.from.row) == 2) {
+		b->en_passant_pawn_push_col_history[b->last_move_ply] = m.to.col;
+		// En passant capture now enabled on this file
+		b->hash ^= zobrist_en_passant_files[b->en_passant_pawn_push_col_history[b->last_move_ply]];
+	}
 
 	// Manually move rook for castling
 	if (m.c != N) { // Manually move rook
@@ -429,6 +453,11 @@ void unapply(board *b, move m) {
 	// Information
 	piece old_piece = p_eq(m.promote_to, no_piece) ? at(b, m.to) : (piece){'P', at(b, m.to).white};
 
+	// If we are unapplying a double pawn push, disable en passant
+	if (b->en_passant_pawn_push_col_history[b->last_move_ply] != -1) {
+		b->hash ^= zobrist_en_passant_files[b->en_passant_pawn_push_col_history[b->last_move_ply]];
+	}
+
 	// Transform board and hash
 	b->hash ^= tt_pieceval(b, m.to);
 	set(b, m.from, old_piece);
@@ -438,6 +467,19 @@ void unapply(board *b, move m) {
 	b->hash ^= zobrist_black_to_move;
 	b->black_to_move = !b->black_to_move;
 	b->last_move_ply--;
+
+	// If the previous move was a double pawn push, enable en passant
+	if (b->en_passant_pawn_push_col_history[b->last_move_ply] != -1) {
+		b->hash ^= zobrist_en_passant_files[b->en_passant_pawn_push_col_history[b->last_move_ply]];
+	}
+
+	// If we just unapplied an en passant move, put the pawn back
+	if (m.en_passant_capture) {
+		uint8_t en_passant_capture_row = old_piece.white ? 4 : 3;
+		coord en_pasant_capture_square = (coord){b->en_passant_pawn_push_col_history[b->last_move_ply], en_passant_capture_row};
+		piece captured_pawn = (piece) {'P', !old_piece.white};
+		set(b, en_pasant_capture_square, captured_pawn);
+	}
 
 	if (old_piece.type == 'K') {
 		if (old_piece.white) b->white_king = m.from;

@@ -31,14 +31,22 @@ static const int prefrontier_futility_margin = 510;
 /*
  * Evaluation settings
  */
-static const int doubled_pawn_penalty = 11; // Evaluation penalties for doubled pawns
+static const int doubled_pawn_penalty = 13; // Evaluation penalties for doubled pawns
 static const int bishop_pair_bonus = 20;
+
+/*
+ * Transposition Table settings
+ */
+#define TT_MEGABYTES_DEFAULT 1000
+static const double tt_max_load = .73;
+// Nodes that haven't been accessed in this many moves are ancient and might be removed
+static const int remove_at_age = 3; // TODO dynamically select?
 
 /*
  * Engine settings
  */
 #define ENGINE_NAME "Sabertooth"
-#define ENGINE_VERSION "0.2"
+#define ENGINE_VERSION "0.1.4"
 #define AUTHOR_NAME "Dylan D. Hunn"
 
 /*

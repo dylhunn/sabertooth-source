@@ -323,12 +323,25 @@ void *timeout_entrypoint(void *time_p) {
 		stdout_fprintf(logstr, "info string search depth 1 timeout (or badly-timed tt_clear); choosing random move\n");
 		int c;
 		move *moves = board_moves(&uciboard, &c, false);
-		if (c > 0) selected_move = moves[0];
+		if (c <= 0) assert(false);
+		int i = 0;
+		selected_move = moves[i];
+		while (puts_in_check(&uciboard, selected_move, uciboard.black_to_move)) selected_move = moves[++i];
 		free(moves);
 	}
 	if (!m_eq(last_tt_pv_move, selected_move)) {
 		stdout_fprintf(logstr, "info string Warning: previous pv move and tt move (%s) don't match! Using the former.\n", move_to_string(selected_move, buffer));
 		selected_move = last_tt_pv_move;
+	}
+	if (!is_legal_move(&uciboard, selected_move)) { // Panic, we somehow ended up with an illegal move
+		stdout_fprintf(logstr, "info string error: the chosen move was illegal! selecting random move...\n");
+		int c;
+		move *moves = board_moves(&uciboard, &c, false);
+		if (c <= 0) assert(false);
+		int i = 0;
+		selected_move = moves[i];
+		while (puts_in_check(&uciboard, selected_move, uciboard.black_to_move)) selected_move = moves[++i];
+		free(moves);
 	}
 	stdout_fprintf(logstr, "bestmove %s\n", move_to_string(selected_move, buffer));
 	search_running = false;

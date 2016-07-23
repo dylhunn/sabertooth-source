@@ -30,6 +30,7 @@ typedef struct move {
 	piece captured;
 	piece promote_to;
 	int8_t c; // castle; structure packing
+	bool en_passant_capture;
 } move;
 
 typedef enum evaltype {
@@ -70,6 +71,9 @@ typedef struct board {
 	uint16_t true_game_ply_clock;
 	coord white_king;
 	coord black_king;
+
+	// Array of double pawn push history indexed by move ply
+	int8_t *en_passant_pawn_push_col_history;
 } board;
 
 typedef struct searchstats {

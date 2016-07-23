@@ -38,6 +38,11 @@ static inline bool c_eq(coord a, coord b) {
 
 static inline bool m_eq(move a, move b) {
 	return c_eq(a.from, b.from) && c_eq(a.to, b.to) && p_eq(a.captured, b.captured) 
+		&& p_eq(a.promote_to, b.promote_to) && a.c == b.c && a.en_passant_capture == b.en_passant_capture;
+}
+
+static inline bool m_eq_without_en_passant(move a, move b) {
+	return c_eq(a.from, b.from) && c_eq(a.to, b.to) && p_eq(a.captured, b.captured) 
 		&& p_eq(a.promote_to, b.promote_to) && a.c == b.c;
 }
 

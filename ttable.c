@@ -10,6 +10,7 @@ uint64_t zobrist_castle_wk;
 uint64_t zobrist_castle_bq;
 uint64_t zobrist_castle_bk;
 uint64_t zobrist_black_to_move;
+uint64_t zobrist_en_passant_files[8];
 
 // How large should the table be?
 int tt_megabytes = TT_MEGABYTES_DEFAULT;
@@ -51,7 +52,7 @@ void tt_init(void) {
 	// First, compute size from memory use
 	const uint64_t bytes_in_mb = 1000000;
 	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / 
-		(sizeof(evaluation) + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(pthread_mutex_t))));
+		(sizeof(evaluation) + sizeof(uint64_t) + sizeof(pthread_mutex_t))));
 	uint64_t check_mb_size = (uint64_t) ((double) tt_size * (sizeof(evaluation) + sizeof(uint64_t))) / bytes_in_mb;
 	printf("info string initializing ttable with %llu slots for total size %llumb\n", tt_size, check_mb_size);
 
@@ -66,9 +67,9 @@ void tt_init(void) {
 	assert(tt_values != NULL);
 	tt_locks = malloc(sizeof(pthread_mutex_t) * tt_size);
 	assert(tt_locks != NULL);
-	tt_node_thread_counts = malloc(sizeof(uint8_t) * tt_size);
-	memset(tt_node_thread_counts, 0, tt_size * sizeof(uint8_t));
-	assert(tt_node_thread_counts != NULL);
+	//tt_node_thread_counts = malloc(sizeof(uint8_t) * tt_size);
+	//memset(tt_node_thread_counts, 0, tt_size * sizeof(uint8_t));
+	//assert(tt_node_thread_counts != NULL);
 	tt_count = 0;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * tt_size));
 
@@ -87,6 +88,7 @@ void tt_init(void) {
 	zobrist_castle_wk = rand64();
 	zobrist_castle_bq = rand64();
 	zobrist_castle_bk = rand64();
+	for (int i = 0; i < 8; i++) zobrist_en_passant_files[i] = rand64();
 	zobrist_black_to_move = rand64();
 	atexit(tt_auto_cleanup);
 	is_initialized = true;
@@ -200,8 +202,8 @@ void tt_put(board *b, evaluation e) {
 	if (e.depth < tt_values[idx].depth) {
 		//sstats.ttable_insert_failures++; 
 		// TODO keeping the deepest entry aappears to caue blunders? Maybe collisions are responsible? Really odd.
-		//pthread_mutex_unlock(tt_locks + idx);
-		//return;
+		pthread_mutex_unlock(tt_locks + idx);
+		return;
 	}
 	skipchecks:
 	e.last_access_move = b->true_game_ply_clock;
@@ -225,6 +227,7 @@ void tt_get(board *b, evaluation *result) {
 		*result = no_eval;
 		return;
 	}
+	// TODO is locking necessary?
 	pthread_mutex_lock(tt_locks + idx);
 	tt_values[idx].last_access_move = b->true_game_ply_clock;
 	sstats.ttable_hits++;
@@ -245,8 +248,6 @@ bool tt_try_to_claim_node(board *b, int *id) {
 		idx = (idx + 1) % tt_size;
 	}
 	pthread_mutex_lock(tt_locks + idx);
-	const uint8_t zero = 0;
-	const uint8_t one = 1;
 	//bool success = __sync_bool_compare_and_swap(tt_node_thread_counts + idx, zero, one);
 	if (tt_node_thread_counts[idx] != 0) {
 		pthread_mutex_unlock(tt_locks + idx);

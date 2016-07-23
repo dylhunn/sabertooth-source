@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "settings.h"
 #include "search.h"
 #include "types.h"
 #include "util.h"
@@ -61,14 +62,11 @@ uint64_t tt_pieceval(board *b, coord c);
  */
 
 // starting size of table, and whether expansion is allowed
-#define TT_MEGABYTES_DEFAULT 1000
 extern int tt_megabytes; // Don't set a value here 
 static bool allow_tt_expansion = false;
 extern bool search_terminate_requested;
 // Re-hash at 70% load factor
-static const double tt_max_load = .75;
-// Nodes that haven't been accessed in this many moves are ancient and might be removed
-static const int remove_at_age = 3; // TODO dynamically select?
+
 
 // Randomly selected zobrist values used to hash board state
 extern uint64_t zobrist[64][12]; // zobrist table for pieces
@@ -77,6 +75,7 @@ extern uint64_t zobrist_castle_wk;
 extern uint64_t zobrist_castle_bq;
 extern uint64_t zobrist_castle_bk;
 extern uint64_t zobrist_black_to_move;
+extern uint64_t zobrist_en_passant_files[8];
 
 // Used to keep track of when the table will actually be cleared
 static int tt_clear_scheduled_on_move = -1;

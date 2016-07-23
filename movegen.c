@@ -10,7 +10,7 @@ piece puts_in_check_radiate_helper(board *b, coord square, coord king_loc);
 
 // Adds a move at the front of the list if it's pseudolegal
 static inline bool add_move(move m, move *list, bool captures_only) {
-	if (captures_only && p_eq(m.captured, no_piece)) return false;
+	if (captures_only && p_eq(m.captured, no_piece) && !m.en_passant_capture) return false;
 	else list[0] = m;
 	return true;
 }
@@ -124,13 +124,23 @@ int pawn_moves(board *b, coord c, move *list, bool captures_only) {
 		coord cap = {c.col + dx, c.row + dy};
 		if (!in_bounds(cap)) continue;
 		piece cap_p = at(b, cap);
-		if (p_eq(cap_p, no_piece) || cap_p.white == curr_p.white) continue;
+		uint8_t en_passant_target_row = curr_p.white ? 5 : 2;
+		bool can_en_passant_capture;
+		if (b->en_passant_pawn_push_col_history[b->last_move_ply] == -1) can_en_passant_capture = false;
+		else can_en_passant_capture = c_eq(cap, (coord){b->en_passant_pawn_push_col_history[b->last_move_ply], en_passant_target_row});
+		if (!can_en_passant_capture) // Continue if there is no en-pas capture and the capture square doesn't work
+			if (p_eq(cap_p, no_piece) || cap_p.white == curr_p.white) continue;
 		if (promote) {
 			for (int i = 0; i < 4; i++) { // promotion types
-				if (add_move((move){c, (coord){c.col + dx, c.row + dy}, cap_p, 
-								(piece){promo_p[i], curr_p.white}, N}, list + added, captures_only)) added++;
+				if (add_move((move){c, (coord){c.col + dx, c.row + dy}, cap_p, (piece){promo_p[i], curr_p.white}, N}, list + added, captures_only)) {
+					added++;
+				}
 			}
-		} else if (add_move((move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N}, list + added, captures_only)) added++;
+		} else {
+			if (add_move((move){c, (coord){c.col + dx, c.row + dy}, at(b, cap), no_piece, N, can_en_passant_capture}, list + added, captures_only)) {
+				added++;
+			}
+		}
 	}
 	return added;
 }
@@ -252,8 +262,9 @@ bool string_to_move(board *b, char *str, move *m) {
 	move *moves;
 	moves = board_moves(b, &nMoves, false);
 	for (int i = 0; i < nMoves; i++) {
-		if (m_eq(moves[i], *m)) {
+		if (m_eq_without_en_passant(moves[i], *m)) {
 			found = true;
+			*m = moves[i]; // copy to duplicate en passant setting
 			break;
 		}
 	}
