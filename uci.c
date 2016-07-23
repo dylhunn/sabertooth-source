@@ -36,7 +36,7 @@ void process_command(char *command_str) {
 	} else if (strcmp(first_token, "uci") == 0) {
 		stdout_fprintf(logstr, "id name %s %s\n", engine_name, engine_version);
 		stdout_fprintf(logstr, "id author %s\n", author_name);
-		stdout_fprintf(logstr, "option name Hash\n");
+		stdout_fprintf(logstr, "option name Hash type spin default 1000 min 10 max 16000\n");
 		stdout_fprintf(logstr, "info string loading %s %s\n", engine_name, engine_version);
 		// Assume a new game is beginning for noncompilant engines (that don't send ucinewgame)
 		tt_init();
@@ -49,16 +49,17 @@ void process_command(char *command_str) {
 
 	} else if (strcmp(first_token, "setoption") == 0) { // a new game is starting
 		char *option = strtok(NULL, token_sep);
-		if (strcmp(first_token, "name") != 0) {
-			stdout_fprintf(logstr, "info string unknown \"setoption\" option \"%s\"\n", option);
+		if (strcmp(option, "name") != 0) {
+			stdout_fprintf(logstr, "info string unknown \"setoption\" option \"%s\" in pos 1\n", option);
 			return;
 		}
-
+		
+		option = strtok(NULL, token_sep);
 		// Options!
 		if (strcasecmp(option, "Hash") == 0) {
 			option = strtok(NULL, token_sep);
-			if (strcmp(first_token, "value") != 0) {
-				stdout_fprintf(logstr, "info string unknown \"setoption\" option \"%s\"\n", option);
+			if (strcmp(option, "value") != 0) {
+				stdout_fprintf(logstr, "info string unknown \"setoption\" option \"%s\" in pos 2\n", option);
 				return;
 			}
 			char *size = strtok(NULL, token_sep);

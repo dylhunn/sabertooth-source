@@ -18,7 +18,7 @@ int tt_megabytes = TT_MEGABYTES_DEFAULT;
 // Table data
 static uint64_t *tt_keys = NULL;
 static evaluation *tt_values = NULL;
-static pthread_mutex_t *tt_locks = NULL;
+//static pthread_mutex_t *tt_locks = NULL;
 static uint8_t *tt_node_thread_counts = NULL;
 static uint64_t tt_size;
 static uint64_t tt_count = 0;
@@ -52,30 +52,30 @@ void tt_init(void) {
 	// First, compute size from memory use
 	const uint64_t bytes_in_mb = 1000000;
 	tt_size = (uint64_t) (ceil(((double) (tt_megabytes * bytes_in_mb)) / 
-		(sizeof(evaluation) + sizeof(uint64_t) + sizeof(pthread_mutex_t))));
+		(sizeof(evaluation) + sizeof(uint64_t))));
 	uint64_t check_mb_size = (uint64_t) ((double) tt_size * (sizeof(evaluation) + sizeof(uint64_t))) / bytes_in_mb;
 	printf("info string initializing ttable with %llu slots for total size %llumb\n", tt_size, check_mb_size);
 
 	if (tt_keys != NULL) free(tt_keys);
 	if (tt_values != NULL) free(tt_values);
-	if (tt_locks != NULL) free(tt_locks);
+	//if (tt_locks != NULL) free(tt_locks);
 	if (tt_node_thread_counts != NULL) free(tt_node_thread_counts);
 	tt_keys = malloc(sizeof(uint64_t) * tt_size);
 	assert(tt_keys != NULL);
 	memset(tt_keys, 0, tt_size * sizeof(uint64_t));
 	tt_values = malloc(sizeof(evaluation) * tt_size);
 	assert(tt_values != NULL);
-	tt_locks = malloc(sizeof(pthread_mutex_t) * tt_size);
-	assert(tt_locks != NULL);
+	//tt_locks = malloc(sizeof(pthread_mutex_t) * tt_size);
+	//assert(tt_locks != NULL);
 	//tt_node_thread_counts = malloc(sizeof(uint8_t) * tt_size);
 	//memset(tt_node_thread_counts, 0, tt_size * sizeof(uint8_t));
 	//assert(tt_node_thread_counts != NULL);
 	tt_count = 0;
 	tt_rehash_count = (uint64_t) (ceil(tt_max_load * tt_size));
 
-	for (int i = 0; i < tt_size; i++) {
+	/*for (int i = 0; i < tt_size; i++) {
 		pthread_mutex_init(tt_locks + i, NULL);
-	}
+	}*/
 
 	// Populate Zobrist data
 	srand((unsigned int) time(NULL));
@@ -173,7 +173,7 @@ void tt_put(board *b, evaluation e) {
 	}
 
 	// We found our entry; lock it
-	pthread_mutex_lock(tt_locks + idx);
+	//pthread_mutex_lock(tt_locks + idx);
 
 	// If it is a new entry, skip the replacement checks
 	if (tt_keys[idx] == 0 || overwriting) goto skipchecks;
@@ -182,14 +182,14 @@ void tt_put(board *b, evaluation e) {
 	// Never replace exact with inexact, or we could easily lose the PV.
 	if (tt_values[idx].type == exact && e.type != exact) {
 		sstats.ttable_insert_failures++;
-		pthread_mutex_unlock(tt_locks + idx);
+		//pthread_mutex_unlock(tt_locks + idx);
 		return;
 	}
 	// only replace qexact with other qexact or exact
 	if (tt_values[idx].type == qexact) {
 		if (e.type != qexact && e.type != exact) {
 			sstats.ttable_insert_failures++;
-			pthread_mutex_unlock(tt_locks + idx);
+			//pthread_mutex_unlock(tt_locks + idx);
 			return;
 		}
 	}
@@ -202,7 +202,7 @@ void tt_put(board *b, evaluation e) {
 	if (e.depth < tt_values[idx].depth) {
 		//sstats.ttable_insert_failures++; 
 		// TODO keeping the deepest entry aappears to caue blunders? Maybe collisions are responsible? Really odd.
-		pthread_mutex_unlock(tt_locks + idx);
+		//pthread_mutex_unlock(tt_locks + idx);
 		return;
 	}
 	skipchecks:
@@ -212,7 +212,7 @@ void tt_put(board *b, evaluation e) {
 	else sstats.ttable_overwrites++;
 	sstats.ttable_inserts++;
 	tt_keys[idx] = b->hash; // Write the key at the end so tt_get will never read an incomplete entry
-	pthread_mutex_unlock(tt_locks + idx);
+	//pthread_mutex_unlock(tt_locks + idx);
 }
 
 // Fetch an entry from the transposition table.
@@ -228,11 +228,11 @@ void tt_get(board *b, evaluation *result) {
 		return;
 	}
 	// TODO is locking necessary?
-	pthread_mutex_lock(tt_locks + idx);
+	//pthread_mutex_lock(tt_locks + idx);
 	tt_values[idx].last_access_move = b->true_game_ply_clock;
 	sstats.ttable_hits++;
 	*result = tt_values[idx];
-	pthread_mutex_unlock(tt_locks + idx);
+	//pthread_mutex_unlock(tt_locks + idx);
 }
 
 // Clear the transposition table (by resetting it).
@@ -247,10 +247,10 @@ bool tt_try_to_claim_node(board *b, int *id) {
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
 		idx = (idx + 1) % tt_size;
 	}
-	pthread_mutex_lock(tt_locks + idx);
+	//pthread_mutex_lock(tt_locks + idx);
 	//bool success = __sync_bool_compare_and_swap(tt_node_thread_counts + idx, zero, one);
 	if (tt_node_thread_counts[idx] != 0) {
-		pthread_mutex_unlock(tt_locks + idx);
+		//pthread_mutex_unlock(tt_locks + idx);
 		return false;
 	}
 	tt_node_thread_counts[idx]++;
@@ -264,7 +264,7 @@ void tt_always_claim_node(board *b, int *id) {
 	while (tt_keys[idx] != 0 && tt_keys[idx] != b->hash) {
 		idx = (idx + 1) % tt_size;
 	}
-	pthread_mutex_lock(tt_locks + idx);
+	//pthread_mutex_lock(tt_locks + idx);
 	tt_node_thread_counts[idx]++;
 	*id = idx;
 }
@@ -272,7 +272,7 @@ void tt_always_claim_node(board *b, int *id) {
 // Unclaims a node for a given id.
 void tt_unclaim_node(int id) {
 	tt_node_thread_counts[id]--;
-	pthread_mutex_unlock(tt_locks + id);
+	//pthread_mutex_unlock(tt_locks + id);
 }
 
 // Expand the table. This won't be called unless the appropriate setting is activated in the .h file.

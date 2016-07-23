@@ -21,8 +21,8 @@ static const bool use_tt_move_hueristic = true; // Use the last move stored in t
 static const bool check_extend = false; // Extend the search by one ply in case of check
 static const int check_extension_centiply = 100; // Centiply to extend in case of check
 static const int check_extend_threshold = 2; // In the final n plies of regular search
-static const bool use_log_file = true;
-static const bool always_use_debug_mode = false;
+static const bool use_log_file = false;
+static const bool always_use_debug_mode = true;
 static const int num_search_threads = 1; // Parallel search
 static const int frontier_futility_margin = 310;
 static const int prefrontier_futility_margin = 510;
@@ -46,7 +46,7 @@ static const int remove_at_age = 3; // TODO dynamically select?
  * Engine settings
  */
 #define ENGINE_NAME "Sabertooth"
-#define ENGINE_VERSION "0.1.4"
+#define ENGINE_VERSION "0.1.4b"
 #define AUTHOR_NAME "Dylan D. Hunn"
 
 /*
