@@ -5,7 +5,7 @@ searchstats sstats;
 
 // Local functions
 int mtd_f(board *b, int ply);
-int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check);
+//int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check);
 void *abq_multithread_entrypoint(void *param);
 int abq(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check);
 int relative_evaluation(board *b);
@@ -69,7 +69,7 @@ void search(board *b, int ply) {
 	else {
 		coord king_loc = b->black_to_move ? b->black_king : b->white_king;
 		bool side_to_move_in_check = in_check(b, king_loc.col, king_loc.row, b->black_to_move);
-		result = abq_multithread(b, NEG_INFINITY, POS_INFINITY, ply, 0, true, side_to_move_in_check);
+		result = abq(b, NEG_INFINITY, POS_INFINITY, ply, 0, true, side_to_move_in_check);
 	}
 	gettimeofday(&t2, NULL);
 	// Compute and print the elapsed time in millisec
@@ -96,14 +96,14 @@ int mtd_f(board *board, int ply) {
 		int beta;
 		if (g == lower_bound) beta = g+1;
 		else beta = g;
-		g = abq_multithread(board, beta-1, beta, ply, 0, true, side_to_move_in_check);
+		g = abq(board, beta-1, beta, ply, 0, true, side_to_move_in_check);
 		if (g < beta) upper_bound = g;
 		else lower_bound = g;
 	}
 	return g;
 }
 
-int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check) {
+/*int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extension, bool allow_extensions, bool side_to_move_in_check) {
 	pthread_t workers[num_search_threads];
 	for (int i = 0; i < num_search_threads; i++) {
 		search_worker_thread_args *args = malloc(sizeof(search_worker_thread_args));
@@ -125,7 +125,7 @@ int abq_multithread(board *b, int alpha, int beta, int ply, int centiply_extensi
        pthread_join(workers[i], &return_val);
 	}
 	return (int)return_val;
-}
+}*/
 
 void *abq_multithread_entrypoint(void *param) {
 	search_worker_thread_args *args = param;

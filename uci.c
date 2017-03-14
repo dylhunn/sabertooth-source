@@ -67,7 +67,7 @@ void process_command(char *command_str) {
 				stdout_fprintf(logstr, "info string invalid hash size selection");
 				return;
 			}
-			tt_megabytes = atoi(size);
+			if (use_hash_option) tt_megabytes = atoi(size);
 			tt_init();
 
 		} else {

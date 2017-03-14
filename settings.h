@@ -17,13 +17,14 @@ static const int quiesce_ply_cutoff = 45; // Quiescence search will cut off afte
 #define use_qsearch true // Quiescence search
 static const bool clear_tt_every_move = false; // Clear the transposition table after each search completes
 #define use_ttable true // Should the transposition table be used to generate search cutoffs?
+#define use_hash_option false // Allow the uci interface to set the tt size
 static const bool use_tt_move_hueristic = true; // Use the last move stored in the TT as a "best-first" hueristic
 static const bool check_extend = false; // Extend the search by one ply in case of check
 static const int check_extension_centiply = 100; // Centiply to extend in case of check
 static const int check_extend_threshold = 2; // In the final n plies of regular search
-static const bool use_log_file = false;
-static const bool always_use_debug_mode = true;
-static const int num_search_threads = 1; // Parallel search
+static const bool use_log_file = true;
+static const bool always_use_debug_mode = false;
+//static const int num_search_threads = 1; // Parallel search
 static const int frontier_futility_margin = 310;
 static const int prefrontier_futility_margin = 510;
 #define use_futility_pruning true
@@ -38,7 +39,7 @@ static const int bishop_pair_bonus = 20;
  * Transposition Table settings
  */
 #define TT_MEGABYTES_DEFAULT 1000
-static const double tt_max_load = .73;
+static const double tt_max_load = .70;
 // Nodes that haven't been accessed in this many moves are ancient and might be removed
 static const int remove_at_age = 3; // TODO dynamically select?
 
